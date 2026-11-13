@@ -168,7 +168,9 @@ input.name:focus { box-shadow: 0 0 0 4px var(--sun), 0 10px 22px rgba(43,45,66,.
 .panel.places::-webkit-scrollbar, .panel.pals::-webkit-scrollbar { display: none; }
 .thumb.scene { --sw: 87px; width: calc(var(--sw) + 8px); height: calc(var(--sw) / 1.5 + 8px); padding: 4px; overflow: hidden; }
 .thumb.scene canvas { width: var(--sw) !important; height: calc(var(--sw) / 1.5) !important; transform: none; border-radius: 15px; }
-.thumb.scene.on, .thumb.pal.on { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--ink); }
+.thumb.scene.on, .thumb.pal.on, .thumb.voice.on, .thumb.tune.on { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--ink); }
+.panel.tunes { grid-template-columns: repeat(5, auto); }
+.thumb.voice, .thumb.tune { background: transparent; box-shadow: none; }
 .thumb.pal { background: #FFF6DF; }
 .storage-notice { position: absolute; top: calc(70px + var(--sat)); left: 50%; transform: translateX(-50%); width: min(90vw, 440px); padding: 12px 16px; background: #FFF4CD; color: var(--ink);
   border-radius: 18px; box-shadow: 0 0 0 2px #D99A00, 0 10px 22px rgba(43,45,66,.14); font-size: 14px; font-weight: 700; z-index: 60; text-align: center; pointer-events: auto; }
@@ -181,6 +183,12 @@ input.name:focus { box-shadow: 0 0 0 4px var(--sun), 0 10px 22px rgba(43,45,66,.
 .questbar .btn.go { --btn: 76px; }
 .questbar .thumb.snack.idle { animation: nudge 2.6s ease-in-out infinite; animation-delay: calc(var(--i) * .12s); }
 @keyframes nudge { 0%, 14%, 100% { transform: none; } 7% { transform: translateY(-9px); } }
+.questbar .hops { display: none; grid-template-columns: repeat(6, auto); gap: 8px; }
+.questbar.math .hops { display: grid; }
+.questbar.math .snacks { display: none; }
+.thumb.hop[hidden] { display: none; }
+.quest .worldbtn { --btn: 54px; }
+.quest:not(.map) .worldbtn { display: none; }
 .quest.map .questbar, .quest.run .questbar { transform: translate(-50%, 170%); opacity: 0; pointer-events: none; }
 .quest.map .questbar *, .quest.run .questbar * { pointer-events: none; }
 
@@ -193,6 +201,7 @@ input.name:focus { box-shadow: 0 0 0 4px var(--sun), 0 10px 22px rgba(43,45,66,.
   .questbar .snacks { grid-template-columns: repeat(4, auto); }
 }
 @media (max-width: 520px) {
+  .questbar .hops { grid-template-columns: repeat(3, auto); gap: 6px; }
   .dock .btn { --btn: 50px; }
   .questbar { gap: 8px; padding: 9px; border-radius: 28px; }
   .questbar .snacks { gap: 6px; }
@@ -325,7 +334,7 @@ const Sound = (() => {
   let size = .5, character = {}, active = 0, chargeState = null, hidden = false;
   let key = 60, playing = false, timer = null, origin = 0, step = 0, run = 0;
   let beatCallback = null, pending = new Set(), musicSeed = 1;
-  const bpm = 112, beatTime = 60 / bpm;
+  let bpm = 124, beatTime = 60 / bpm, theme = 'pop', hook = [];
   const safe = fn => (...args) => { try { return fn(...args); } catch (_) {} };
   const clamp = (n, a, b, fallback = a) => Number.isFinite(n) ? Math.max(a, Math.min(b, n)) : fallback;
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -344,7 +353,7 @@ const Sound = (() => {
     for (let i = 0; i < curve.length; i++) curve[i] = .87 * Math.tanh((i / (curve.length - 1) * 2 - 1) / .87);
     limiter.curve = curve;
     master.connect(compressor); compressor.connect(limiter); limiter.connect(ctx.destination);
-    musicBus = ctx.createGain(); musicBus.gain.value = .72; musicBus.connect(master);
+    musicBus = ctx.createGain(); musicBus.gain.value = .86; musicBus.connect(master);
     unlocked = true;
   }
   function ramp(param, value, t, tau = .025) { param.cancelScheduledValues(t); param.setTargetAtTime(value, t, tau); }
@@ -367,7 +376,7 @@ const Sound = (() => {
     const nodes = [a, filter, env, ...output.nodes];
     if (vocal) {
       const b = ctx.createOscillator(), blend = ctx.createGain(); b.type = 'sine'; b.frequency.setValueAtTime(Math.max(15, f0), t); b.frequency.exponentialRampToValueAtTime(Math.max(15, f1), t + duration * .85); blend.gain.value = .48; b.connect(blend); blend.connect(env); b.start(t); b.stop(t + duration + .015); nodes.push(b, blend);
-      const lfo = ctx.createOscillator(), depth = ctx.createGain(); lfo.frequency.value = shape === 'brr' ? 22 : character.vibrato; depth.gain.value = shape === 'dizzy' ? 95 : shape === 'brr' ? 35 : 5 + size * 4; lfo.connect(depth); depth.connect(a.detune); depth.connect(b.detune); lfo.start(t); lfo.stop(t + duration + .015); nodes.push(lfo, depth);
+      const lfo = ctx.createOscillator(), depth = ctx.createGain(); lfo.frequency.value = shape === 'brr' ? 22 : Math.max(.01, character.vibrato * character.style.vr); depth.gain.value = shape === 'dizzy' ? 95 : shape === 'brr' ? 35 : (5 + size * 4) * character.style.vd; lfo.connect(depth); depth.connect(a.detune); depth.connect(b.detune); lfo.start(t); lfo.stop(t + duration + .015); nodes.push(lfo, depth);
     }
     active++; a.onended = () => { active = Math.max(0, active - 1); nodes.forEach(n => { try { n.disconnect(); } catch (_) {} }); };
     a.start(t); a.stop(t + duration + .02);
@@ -417,7 +426,20 @@ const Sound = (() => {
     active++; source.onended = () => { active = Math.max(0, active - 1); nodes.forEach(n => { try { n.disconnect(); } catch (_) {} }); };
     source.start(t); source.stop(t + duration + .02); flick.forEach(([l]) => { l.start(t); l.stop(t + duration + .02); });
   }
-  function setVoice(v = {}) { size = clamp(v.size, 0, 1, size); if (v.seed !== undefined || !character.vibrato) { const r = seeded(v.seed); character = { offset: r() * 8 - 4, formant: .82 + r() * .36, vibrato: 4.4 + r() * 2.2, habit: r() }; } }
+  // Six ways of talking. Each is a different instrument: how high, how fast, how bright, how wobbly.
+  const STYLES = {
+    chirp:  { wave: 'triangle', up: 0,   speed: 1,    form: 1,    vr: 1,   vd: 1,   amp: 1 },
+    squeak: { wave: 'sine',     up: 10,  speed: .74,  form: 1.5,  vr: 1.5, vd: 2.5, amp: 1.15 },
+    rumble: { wave: 'sawtooth', up: -15, speed: 1.35, form: .5,   vr: .6,  vd: 2,   amp: .8 },
+    bubble: { wave: 'sine',     up: 4,   speed: .92,  form: 1.15, vr: 3.4, vd: 14,  amp: 1.15 },
+    robot:  { wave: 'square',   up: -2,  speed: 1.05, form: .95,  vr: 0,   vd: 0,   amp: .7, flat: true },
+    kazoo:  { wave: 'sawtooth', up: 1,   speed: .95,  form: 1.7,  vr: 1.3, vd: 5,   amp: 1 },
+  };
+  function setVoice(v = {}) {
+    size = clamp(v.size, 0, 1, size);
+    if (v.seed !== undefined || !character.vibrato) { const r = seeded(v.seed); character = { offset: r() * 8 - 4, formant: .82 + r() * .36, vibrato: 4.4 + r() * 2.2, habit: r(), style: STYLES.chirp }; }
+    if (v.seed !== undefined || v.style !== undefined) character.style = STYLES[v.style] || STYLES.chirp;
+  }
   setVoice({ seed: 1 });
   const voices = {
     hello: [[0,.21,0,4],[.22,.2,3,1],[.43,.27,2,7]], boop: [[0,.105,2,-2]],
@@ -429,10 +451,13 @@ const Sound = (() => {
   };
   function voice(kind, opts = {}) {
     if (!ready() || !Object.prototype.hasOwnProperty.call(voices, kind) || active > 48 || (kind === 'boop' && active > 24)) return;
-    const t = ctx.currentTime + .003, speed = (.72 + size * .48) * (.94 + character.habit * .12), base = 76 - size * 24 + character.offset + clamp(opts.pitch, -36, 36, 0) + rand(-.25,.25);
+    const st = character.style, t = ctx.currentTime + .003, speed = (.72 + size * .48) * (.94 + character.habit * .12) * st.speed, base = 76 - size * 24 + character.offset + st.up + clamp(opts.pitch, -36, 36, 0) + rand(-.25,.25);
     voices[kind].forEach(([delay,duration,p,q], i) => {
-      const amp = (kind === 'snore' ? .15 : .23) * (1 - i * .035);
-      tone(t + delay * speed, duration * speed, hz(base+p), hz(base+q), amp, 'triangle', (850 + (1-size)*1300)*character.formant, opts, master, true, kind);
+      const amp = (kind === 'snore' ? .15 : .23) * (1 - i * .035) * st.amp;
+      // a robot does not slide between notes: it steps
+      const f0 = st.flat ? hz(Math.round(base + (p + q) / 2)) : hz(base+p), f1 = st.flat ? f0 : hz(base+q);
+      tone(t + delay * speed, duration * speed, f0, f1, amp, st.wave, (850 + (1-size)*1300)*character.formant*st.form, opts, master, true, kind);
+      if (st.flat && duration > .15) tone(t + delay * speed + duration * speed * .5, duration * speed * .4, f0 * 1.5, f0 * 1.5, amp * .5, 'square', 1800, opts);
       if (kind === 'hot' || kind === 'snore' || kind === 'munch') noise(t+delay*speed, Math.min(duration,.3), .1, 750, opts);
       if (kind === 'brr') for(let j=1;j<7;j++) tone(t+j*.07,.055,hz(base+rand(-1,1)),hz(base),.075,'sine',1400,opts);
     });
@@ -486,7 +511,8 @@ const Sound = (() => {
     if (!ready() || !Number.isInteger(degree) || active>48) return;
     const scale=[0,2,4,7,9], n=key+12+scale[((degree%5)+5)%5]+12*Math.floor(degree/5);
     if(n<0 || n>120) return;
-    tone(ctx.currentTime+.003,.36,hz(n)*.985,hz(n),.27,'triangle',(850+(1-size)*1300)*character.formant,opts,master,true);
+    const st=character.style, f=hz(n+(st.up>6?12:st.up<-6?-12:0));
+    tone(ctx.currentTime+.003,.36,st.flat?f:f*.985,f,.27*st.amp,st.wave,(850+(1-size)*1300)*character.formant*st.form,opts,master,true);
   }
   function stopCharge() {
     if(!chargeState) return; const old=chargeState; chargeState=null; const t=ctx.currentTime;
@@ -515,26 +541,94 @@ const Sound = (() => {
     tone(t,.32,85,42,.32); noise(t+.06,.55,.13,2000);
   }
   function clearTimers() { if(timer!==null) clearInterval(timer); timer=null; pending.forEach(clearTimeout); pending.clear(); }
+  // Five kinds of band. Each plays the same chords its own way; a short tune made from the seed comes round again and again.
+  const THEMES = {
+    pop:   { bpm: 124, prog: [0, 7, 9, 5], scale: [0, 2, 4, 7, 9], level: 1.5 },
+    funk:  { bpm: 104, prog: [0, 0, 5, 0], scale: [0, 3, 5, 7, 10], level: 1.9, swing: .3, minor: true },
+    chip:  { bpm: 138, prog: [0, 9, 5, 7], scale: [0, 2, 4, 7, 9], level: 1.8 },
+    beach: { bpm: 108, prog: [0, 5, 7, 5], scale: [0, 2, 4, 7, 9], level: 1.55 },
+    dream: { bpm: 84,  prog: [0, 9, 5, 7], scale: [0, 2, 4, 7, 9], level: 1 },
+  };
+  function makeHook() {                                     // a little tune that wanders up and down the scale and ends where it began
+    const r = seeded(musicSeed * 31 + 7); let d = 2 + Math.floor(r() * 3); hook = [];
+    for (let i = 0; i < 16; i++) { hook.push(d); d = Math.max(0, Math.min(9, d + [-2, -1, -1, 1, 1, 2, 3][Math.floor(r() * 7)])); }
+    hook[15] = hook[0]; hook[7] = hook[0] + 2;
+  }
   function scheduleStep(index, when, token) {
-    const sixteenth=index%16, bar=Math.floor(index/16), r=seeded(musicSeed+bar%8*97+sixteenth*13), progression=[0,0,5,5,9,5,7,7], root=key+progression[bar%8];
-    const bus=musicBus;
-    if(sixteenth%4===0) {
-      tone(when,.19,100,42,.32,'sine',600,{},bus);
-      const beat=sixteenth/4;
-      if(!offline()) { const id=setTimeout(()=>{pending.delete(id); if(playing&&token===run&&typeof beatCallback==='function') {try{beatCallback(beat,bar,when);}catch(_){}}},Math.max(0,(when-ctx.currentTime)*1000)); pending.add(id); }
-      if(beat===1 || beat===3) { noise(when,.10,.21,1500,{},bus); tone(when,.055,370,320,.11,'triangle',1200,{},bus); }
-      const bass=root-12+(beat===2?7:0); tone(when,.26,hz(bass),hz(bass),.23,'triangle',550,{},bus);
+    const T = THEMES[theme], s = index % 16, bar = Math.floor(index / 16), bus = musicBus, beat = s / 4;
+    const off = T.prog[bar % 4], root = key + off, third = T.minor ? (off === 5 ? 4 : 3) : ([2, 4, 9].includes(off) ? 3 : 4);
+    if (T.swing && s % 2) when += beatTime / 4 * T.swing;
+    if (s % 4 === 0 && !offline()) { const id = setTimeout(() => { pending.delete(id); if (playing && token === run && typeof beatCallback === 'function') { try { beatCallback(beat, bar, when); } catch (_) {} } }, Math.max(0, (when - ctx.currentTime) * 1000)); pending.add(id); }
+    const kick = (a = .36) => tone(when, .17, 150, 44, a, 'sine', 900, {}, bus);
+    const snare = (a = .2) => { noise(when, .13, a, 4200, {}, bus); tone(when, .07, 250, 170, a * .55, 'triangle', 1500, {}, bus); };
+    const clap = (a = .2) => { noise(when, .05, a, 3000, {}, bus); noise(when + .014, .11, a * .9, 3400, {}, bus); };
+    const hat = (a = .07, open = false, pan = 0) => noise(when, open ? .16 : .035, a, 9000, { pan }, bus);
+    const note = (n, dur, a, type = 'sine', color = 2400, o = {}, bend = 1) => tone(when, dur, hz(n) * bend, hz(n), a, type, color, o, bus);
+    const sc = (d, oct = 0) => key + 12 * oct + T.scale[((d % 5) + 5) % 5] + 12 * Math.floor(d / 5);
+    const tune = (i) => hook[(bar % 2) * 8 + i] + (bar % 8 === 7 ? 1 : 0);
+    const chord = [0, third, 7];
+    switch (theme) {
+      case 'pop': {
+        if (s % 4 === 0) kick();
+        if (s === 4 || s === 12) clap();
+        if (s % 4 === 2) hat(.11, true, .2); else if (s % 2 === 0) hat(.05, false, -.2);
+        if (s % 2 === 0) note(root - 24 + (s % 4 === 2 ? 12 : 0), .2, .26, 'sawtooth', 620);
+        if ([3, 6, 11, 14].includes(s)) chord.forEach((n, i) => tone(when + i * .006, .16, hz(root + n), hz(root + n), .055, 'square', 2600, { pan: i * .3 - .3 }, bus));
+        const at = [0, 3, 6, 8, 10, 12, 14, -1].indexOf(s);
+        if (at >= 0) note(sc(tune(at), 1), s === 14 ? .34 : .2, .12, 'square', 3000, {}, .97);
+        if (bar % 4 === 3 && s >= 12) note(root + 12 + [0, third, 7, 12][s - 12], .12, .09, 'sine', 5000);
+        break;
+      }
+      case 'funk': {
+        if ([0, 7, 10].includes(s)) kick(s === 7 ? .24 : .36);
+        if (s === 4 || s === 12) snare(.22); else if (s === 15 || s === 9) snare(.06);
+        hat(s % 4 === 2 ? .09 : .045, s === 6 || s === 14, s % 2 ? .25 : -.25);
+        const riff = { 0: 0, 3: 0, 6: 12, 7: 10, 10: 0, 12: 7, 14: 10, 15: 12 }[s];
+        if (riff !== undefined) note(root - 24 + riff, .13, .3, 'sawtooth', 950);
+        if ([2, 5, 9, 13].includes(s)) [0, third, 7, 10].forEach((n, i) => tone(when, .07, hz(root + n), hz(root + n), .042, 'square', 2800, { pan: i % 2 ? .35 : -.35 }, bus));
+        const at = bar % 2 ? [0, 3, 4, 8, 11, 12].indexOf(s) : [8, 10, 11, 14].indexOf(s);
+        if (at >= 0) note(sc(tune(at), 1), .17, .12, 'triangle', 2400, {}, .94);
+        break;
+      }
+      case 'chip': {
+        if ([0, 8, 10].includes(s)) kick(.3);
+        if (s === 4 || s === 12) noise(when, .09, .16, 6000, {}, bus);
+        note(root + [0, third, 7, 12][s % 4] + (s >= 8 ? 12 : 0), .07, .05, 'square', 4200, { pan: s % 2 ? .4 : -.4 });
+        if (s % 2 === 0) note(root - 12 + (s % 8 === 4 ? 7 : 0), .11, .2, 'triangle', 1200);
+        const at = [0, 2, 4, 6, 8, 10, 12, 14].indexOf(s);
+        if (at >= 0 && !(bar % 4 === 3 && s >= 8)) note(sc(tune(at), 1), .13, .1, 'square', 3600);
+        if (bar % 4 === 3 && s >= 8) note(root + 12 + [0, third, 7, 12, 7 + 12, 12 + third, 24, 24][s - 8], .06, .09, 'square', 4500);
+        break;
+      }
+      case 'beach': {
+        if (s === 0 || s === 8) kick(.3); else if (s === 7) kick(.16);
+        if ([0, 3, 6, 10, 12].includes(s)) tone(when, .05, 1150, 1000, .15, 'sine', 5000, { pan: .3 }, bus);     // clave
+        noise(when, .03, s % 4 === 2 ? .075 : .035, 8000, { pan: -.3 }, bus);                                    // shaker
+        const b = { 0: 0, 3: 7, 6: 12, 8: 0, 11: 7, 14: 12 }[s];
+        if (b !== undefined) note(root - 24 + b, .24, .3, 'sine', 700);
+        if ([0, 2, 3, 5, 6, 8, 10, 11, 13, 14].includes(s)) { const n = root + [0, third, 7, 12, 7, third][s % 6]; note(n, .28, .1, 'sine', 3200, { pan: -.2 }); note(n + 24, .09, .03, 'sine', 7000, { pan: -.2 }); }
+        const at = [0, 3, 6, 8, 11, 14, -1, -1].indexOf(s);
+        if (at >= 0) { const n = sc(tune(at), 1); note(n, .3, .12, 'triangle', 2800, { pan: .2 }); note(n + 12, .16, .05, 'sine', 5000, { pan: .2 }, 1.01); }
+        break;
+      }
+      default: {                                            // dream
+        if (s === 0) { chord.forEach((n) => tone(when, beatTime * 3.6, hz(root + n), hz(root + n), .085, 'sine', 1400, {}, bus, false, 'bloom')); note(root - 24, beatTime * 3, .22, 'sine', 500); }
+        if (s === 0 || s === 8) kick(.16);
+        if (s === 4 || s === 12) hat(.04);
+        const at = [0, 4, 6, 8, 12, 14, -1, -1].indexOf(s);
+        if (at >= 0) { const n = sc(tune(at), 1); note(n, .6, .13, 'sine', 3000); note(n + 12, .3, .04, 'sine', 6000); }
+        const r = seeded(musicSeed + bar * 97 + s * 13);
+        if (r() < .22) note(sc(Math.floor(r() * 5), 2), .5, .045, 'sine', 6000, { pan: r() * 1.6 - .8 });
+      }
     }
-    if(sixteenth%2===0) noise(when,.042,.085,3200,{pan:sixteenth%4===0?-.25:.25},bus);
-    if([0,6,10].includes(sixteenth)) [0,4,7].forEach((n,i)=>tone(when+i*.009,.24,hz(root+n),hz(root+n),.085,'triangle',1900,{},bus));
-    if([2,7,10,14].includes(sixteenth)) { const scale=[0,2,4,7,9], note=key+12+scale[(bar%8+Math.floor(r()*5))%5]; tone(when,.22,hz(note),hz(note),.12,'sine',2600,{},bus); }
   }
   function schedule() { if(!playing||!ready()) return; const token=run; while(origin+step*beatTime/4<ctx.currentTime+.12) { scheduleStep(step,origin+step*beatTime/4,token); step++; } }
   function startMusic(options={}) {
     if(!ready()||playing) return;
     const r=seeded(options.seed); musicSeed=Number.isFinite(options.seed)?options.seed:1; key=[60,62,65,67][Math.floor(r()*4)];
+    theme=THEMES[options.theme]?options.theme:'pop'; bpm=THEMES[theme].bpm; beatTime=60/bpm; makeHook();
     // A fresh bus isolates a new show from the preceding show's fade.
-    const previous=musicBus; musicBus=ctx.createGain(); musicBus.gain.value=.72; musicBus.connect(master);
+    const previous=musicBus; musicBus=ctx.createGain(); musicBus.gain.value=.86*THEMES[theme].level; musicBus.connect(master);
     if(previous) { const old=previous; setTimeout(()=>{try{old.disconnect();}catch(_){}},400); }
     playing=true; run++; step=0; origin=ctx.currentTime+.035;
     // Offline rendering has no wall-clock scheduler ticks: schedule the finite timeline eagerly.
@@ -542,7 +636,7 @@ const Sound = (() => {
     else { schedule(); timer=setInterval(safe(schedule),25); }
   }
   function stopMusic() { if(!playing) return; playing=false; run++; clearTimers(); if(ctx&&musicBus) ramp(musicBus.gain,0,ctx.currentTime,.055); }
-  const music={ start:safe(startMusic), stop:safe(stopMusic), get playing(){return playing;}, get bpm(){return bpm;}, get onBeat(){return beatCallback;}, set onBeat(fn){beatCallback=fn;}, phase:safe(()=>playing&&ctx?Math.max(0,((ctx.currentTime-origin)/beatTime)%1):0) };
+  const music={ start:safe(startMusic), stop:safe(stopMusic), get playing(){return playing;}, get bpm(){return bpm;}, get theme(){return theme;}, get onBeat(){return beatCallback;}, set onBeat(fn){beatCallback=fn;}, phase:safe(()=>playing&&ctx?Math.max(0,((ctx.currentTime-origin)/beatTime)%1):0) };
   const api={
     unlock:safe(()=>{ if(!ctx) {const C=typeof AudioContext!=='undefined'?AudioContext:typeof webkitAudioContext!=='undefined'?webkitAudioContext:null;if(!C)return;setup(new C());} unlocked=true; if(ctx.state==='suspended'||ctx.state==='interrupted') {const p=ctx.resume();if(p&&p.catch)p.catch(()=>{});} }),
     get muted(){return muted;}, setMuted:safe(v=>{muted=!!v;if(master)ramp(master.gain,muted?0:.9,ctx.currentTime,.02);}),
@@ -766,6 +860,8 @@ const ICONS = {
   ears: _svg('<path d="M4.500 20c-1.500-6-1-13 1.500-16 3 1.500 5.500 5.500 6 9M19.500 20c1.500-6 1-13-1.500-16-3 1.500-5.500 5.500-6 9"/>'),
   hat: _svg('<path d="M5.500 19.500 12 6l6.500 13.500z"/><circle cx="12" cy="4.500" r="1.800" fill="currentColor"/><path d="M8.300 13.500l7 2.500"/>'),
   book: _svg('<path d="M12 6.5c-2-1.500-4.500-2-8.200-2v13c3.700 0 6.200.5 8.200 2 2-1.500 4.500-2 8.200-2v-13c-3.700 0-6.200.5-8.200 2z"/><path d="M12 6.5v13"/>'),
+  pond: _svg('<path d="M12 12 19.300 8.200A8.200 8.200 0 1 0 20.200 12z"/><circle cx="8.300" cy="10" r="1.100" fill="currentColor" stroke="none"/><circle cx="8.300" cy="14.500" r="1.100" fill="currentColor" stroke="none"/><circle cx="12" cy="16.300" r="1.100" fill="currentColor" stroke="none"/>'),
+  voice: _svg('<path d="M4 5.500h16v10.500h-8.500l-4.500 3.500v-3.500h-3z"/><path d="M8 11.500v-1.500M11 12.500v-3.500M14 12v-2.500M17 11.500v-1.500"/>'),
   flag: _svg('<path d="M6 21V3.500"/><path d="M6 4.500c4.500-2 6.500 2 12.500 0v8c-6 2-8-2-12.500 0z" fill="currentColor"/>'),
   friends: _svg('<path d="M3.200 12.300c0-4 2.500-6.600 6-6.600s5.600 2.500 5.600 6.100-2.500 6.200-5.800 6.200-5.800-2.200-5.800-5.700z"/><g fill="currentColor" stroke="none"><circle cx="7.300" cy="11.300" r="1.150"/><circle cx="11.200" cy="11.300" r="1.150"/></g><path d="M7.600 14.400c1 .9 2.300.9 3.300 0"/><path d="M16.300 8.200c2.700.3 4.500 2.300 4.500 5 0 3-2.200 4.900-5 4.800"/>'),
   place: _svg('<rect x="3" y="4.500" width="18" height="15" rx="3.800"/><circle cx="8.300" cy="9.200" r="1.700" fill="currentColor" stroke="none"/><path d="M3.500 17.200l5-4.700 3.300 3 3.700-4.700 5 6.200"/>'),
@@ -1744,6 +1840,9 @@ const PART_TRAYS = {
   bits: ['earRound', 'earPoint', 'earLong', 'horn', 'antenna', 'arm', 'foot', 'mitten', 'skate', 'wing', 'tail', 'tentacle', 'tuft', 'puff', 'braid', 'ponytail', 'spike', 'cape', 'stick', 'balloon'],
   wear: ['hat', 'toque', 'cap', 'crown', 'helmet', 'patka', 'headscarf', 'earmuffs', 'headphones', 'scarf', 'bow', 'glasses', 'flower', 'nose', 'mustache', 'cheek', 'star', 'heart', 'patch', 'freckles'],
 };
+// how it talks, and the band that plays for its show
+const VOICE_LIST = ['chirp', 'squeak', 'rumble', 'bubble', 'robot', 'kazoo'];
+const TUNE_LIST = ['pop', 'funk', 'chip', 'beach', 'dream'];
 for (const k in PARTS) if (!PARTS[k].kind && !PART_TRAYS.bits.includes(k) && !PART_TRAYS.wear.includes(k)) PART_TRAYS[PARTS[k].layer === 'back' ? 'bits' : 'wear'].push(k);
 const MAX_PARTS = 28;
 
@@ -1752,7 +1851,7 @@ function newCreatureData() {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     name: '', color: PALETTE[5], outline: null,
     paint: [], parts: [], tricks: [],
-    place: 'meadow', pals: [],
+    place: 'meadow', pals: [], voice: 'chirp', tune: 'pop',
     awake: false, seed: (Math.random() * 1e9) | 0, born: Date.now(),
   };
 }
@@ -1776,6 +1875,8 @@ function cleanCreature(d) {
     .map((p) => ({ k: p.k, x: clamp(p.x, -0.1, 1.1), y: clamp(p.y, -0.1, 1.1), s: clamp(Number.isFinite(p.s) ? p.s : 1, 0.4, 3.2), r: Number.isFinite(p.r) ? p.r : 0, c: typeof p.c === 'string' && /^#[0-9a-f]{6}$/i.test(p.c) ? p.c : null }));
   d.paint = (Array.isArray(d.paint) ? d.paint : []).filter((s) => s && nums(s.p) && s.p.length >= 2 && s.p.length % 2 === 0 && Number.isFinite(s.w) && typeof s.c === 'string').slice(-500);
   d.place = typeof d.place === 'string' && Places.has(d.place) ? d.place : 'meadow';
+  d.voice = VOICE_LIST.includes(d.voice) ? d.voice : 'chirp';
+  d.tune = TUNE_LIST.includes(d.tune) ? d.tune : 'pop';
   d.pals = (Array.isArray(d.pals) ? d.pals : []).filter((s) => typeof s === 'string' && s.length < 40).slice(0, 3);
   d.tricks = (Array.isArray(d.tricks) ? d.tricks : []).filter((t) => t && nums(t.p) && t.p.length >= 6 && t.p.length % 3 === 0).slice(0, 4);
   return d;
@@ -2287,7 +2388,7 @@ const Codec = (() => {
   function pack(d, eps, trickStep, withTricks, maxStrokes) {
     const b = [];
     const [r, g, bl] = hexToRgb(d.color);
-    b.push(1, r, g, bl, (d.seed >>> 24) & 255, (d.seed >>> 16) & 255, (d.seed >>> 8) & 255, d.seed & 255, d.awake ? 1 : 0);
+    b.push(1, r, g, bl, (d.seed >>> 24) & 255, (d.seed >>> 16) & 255, (d.seed >>> 8) & 255, d.seed & 255, (d.awake ? 1 : 0) | (Math.max(0, VOICE_LIST.indexOf(d.voice)) << 1) | (Math.max(0, TUNE_LIST.indexOf(d.tune)) << 4));
     const name = new TextEncoder().encode((d.name || '').slice(0, 14)).slice(0, 40);
     b.push(name.length, ...name);
     const o = d.outline;
@@ -2337,7 +2438,7 @@ const Codec = (() => {
       const d = newCreatureData();
       d.color = rgbToHex(rd(), rd(), rd());
       d.seed = ((rd() << 24) | (rd() << 16) | (rd() << 8) | rd()) >>> 0;
-      d.awake = !!(rd() & 1);
+      const flags = rd(); d.awake = !!(flags & 1); d.voice = VOICE_LIST[(flags >> 1) & 7] || 'chirp'; d.tune = TUNE_LIST[(flags >> 4) & 7] || 'pop';
       const nl = rd(); d.name = new TextDecoder().decode(b.slice(k, k + nl)).slice(0, 14); k += nl;
       const n = rd(); if (n < 8) return null;
       d.outline = [];
@@ -2379,6 +2480,39 @@ const Codec = (() => {
 // ===== studio.js =====
 // ---------- Studio: shape it, paint it, give it a face ----------
 const TALL_PARTS = ['hat', 'crown', 'toque', 'cap', 'patka', 'helmet'];
+// a speech bubble with the shape of the sound inside: one picture for each way of talking
+const VOICE_ART = { chirp: ['#FFC928', 0], squeak: ['#FF6FB5', 1], rumble: ['#8E5CF2', 2], bubble: ['#35B6F2', 3], robot: ['#9AA3B8', 4], kazoo: ['#FF9433', 5] };
+function drawVoiceThumb(g, key, size) {
+  const [col, kind] = VOICE_ART[key], u = size / 54;
+  g.clearRect(0, 0, size, size); g.save(); g.scale(u, u);
+  g.lineJoin = g.lineCap = 'round'; g.lineWidth = 2.6; g.strokeStyle = INK; g.fillStyle = col;
+  g.beginPath(); g.moveTo(14, 42); g.lineTo(11, 50); g.lineTo(22, 42); g.lineTo(38, 42); g.quadraticCurveTo(48, 42, 48, 32); g.lineTo(48, 18); g.quadraticCurveTo(48, 8, 38, 8); g.lineTo(16, 8); g.quadraticCurveTo(6, 8, 6, 18); g.lineTo(6, 32); g.quadraticCurveTo(6, 42, 14, 42); g.closePath(); g.fill(); g.stroke();
+  g.strokeStyle = '#fff'; g.fillStyle = '#fff'; g.lineWidth = 3.2; g.beginPath();
+  const y = 25, x0 = 12, x1 = 42;
+  if (kind === 0) for (let x = x0; x <= x1; x++) { const v = y - Math.sin(((x - x0) / 30) * TAU * 1.5) * 7; x === x0 ? g.moveTo(x, v) : g.lineTo(x, v); }
+  else if (kind === 1) for (let i = 0; i <= 10; i++) { const x = x0 + i * 3, v = y - 4 + (i % 2 ? -5 : 5) - i * 0.5; i ? g.lineTo(x, v) : g.moveTo(x, v); }
+  else if (kind === 2) { g.lineWidth = 5; for (let x = x0; x <= x1; x++) { const v = y + Math.sin(((x - x0) / 30) * TAU * 0.75) * 9; x === x0 ? g.moveTo(x, v) : g.lineTo(x, v); } }
+  else if (kind === 3) { g.lineWidth = 2.6; for (const [bx, by, r] of [[16, 30, 5], [27, 21, 7], [38, 30, 4], [39, 17, 3]]) { g.moveTo(bx + r, by); g.arc(bx, by, r, 0, TAU); } }
+  else if (kind === 4) { g.lineJoin = 'miter'; g.moveTo(x0, y + 6); for (let i = 0; i < 4; i++) { const x = x0 + i * 7.5; g.lineTo(x, y + (i % 2 ? 6 : -6)); g.lineTo(x + 7.5, y + (i % 2 ? 6 : -6)); } }
+  else for (let i = 0; i <= 5; i++) { const x = x0 + i * 6; if (i) g.lineTo(x, y - 7); else g.moveTo(x, y + 7); if (i < 5) g.lineTo(x, y + 7), g.lineTo(x + 6, y - 7); }
+  g.stroke(); g.restore();
+}
+// one picture for each band: a star, sunglasses, a pixel heart, a sun on the water, a moon
+const TUNE_ART = { pop: '#FF6FB5', funk: '#FF9433', chip: '#3F6BF0', beach: '#35B6F2', dream: '#5B4BB5' };
+function drawTuneThumb(g, key, size) {
+  const u = size / 54;
+  g.clearRect(0, 0, size, size); g.save(); g.scale(u, u);
+  g.lineJoin = g.lineCap = 'round'; g.lineWidth = 2.6; g.strokeStyle = INK;
+  g.fillStyle = TUNE_ART[key]; g.beginPath(); g.roundRect(5, 5, 44, 44, 14); g.fill(); g.stroke();
+  g.save(); g.beginPath(); g.roundRect(5, 5, 44, 44, 14); g.clip();
+  if (key === 'pop') { g.fillStyle = '#FFC928'; g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i / 10) * TAU, r = i % 2 ? 7 : 15.5; g.lineTo(27 + Math.cos(a) * r, 28 + Math.sin(a) * r); } g.closePath(); g.fill(); g.stroke(); g.fillStyle = '#fff'; for (const [x, y] of [[13, 14], [42, 40], [41, 13]]) { g.beginPath(); g.arc(x, y, 2, 0, TAU); g.fill(); } }
+  else if (key === 'funk') { g.fillStyle = INK; for (const x of [18, 36]) { g.beginPath(); g.roundRect(x - 8, 21, 16, 12, [3, 3, 7, 7]); g.fill(); } g.lineWidth = 3; g.beginPath(); g.moveTo(26, 23); g.lineTo(28, 23); g.moveTo(10, 23); g.lineTo(6, 20); g.moveTo(44, 23); g.lineTo(48, 20); g.stroke(); g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.moveTo(14, 25); g.lineTo(17, 24); g.moveTo(32, 25); g.lineTo(35, 24); g.stroke(); g.strokeStyle = INK; g.lineWidth = 2.6; g.beginPath(); g.arc(27, 36, 6, 0.25, Math.PI - 0.25); g.stroke(); }
+  else if (key === 'chip') { g.fillStyle = '#FF5A4E'; const px = 5, rows = ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...']; rows.forEach((row, j) => [...row].forEach((ch, i) => { if (ch === '#') g.fillRect(9.5 + i * px, 13 + j * px, px, px); })); g.fillStyle = '#fff'; g.fillRect(14.5, 18, px, px); }
+  else if (key === 'beach') { g.fillStyle = '#FFC928'; g.beginPath(); g.arc(27, 24, 10, 0, TAU); g.fill(); g.stroke(); g.fillStyle = '#2E86D0'; g.beginPath(); g.moveTo(0, 36); for (let x = 0; x <= 54; x += 3) g.lineTo(x, 34 + Math.sin(x * 0.45) * 2.5); g.lineTo(54, 54); g.lineTo(0, 54); g.closePath(); g.fill(); g.stroke(); }
+  else { g.fillStyle = '#FFF6D0'; g.beginPath(); g.arc(25, 27, 12, 0, TAU); g.fill(); g.fillStyle = TUNE_ART.dream; g.beginPath(); g.arc(30.5, 23.5, 10.5, 0, TAU); g.fill(); g.fillStyle = '#fff'; for (const [x, y, r] of [[40, 14, 2.2], [14, 13, 1.6], [42, 36, 1.8], [36, 26, 1.3]]) { g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); } }
+  g.restore(); g.restore();
+}
+
 function drawPartThumb(g, key, size, body) {
   const def = PARTS[key], fill = partTint(def, body);
   const tall = def.layer === 'back' || TALL_PARTS.includes(key), box = def.box;
@@ -2394,7 +2528,7 @@ function drawPartThumb(g, key, size, body) {
 
 const Studio = (() => {
   const BRUSH = [0.02, 0.045, 0.09], SHAPE_BRUSH = 0.1;
-  const CATS = [['eyes', 'eyes'], ['mouths', 'mouth'], ['bits', 'ears'], ['wear', 'hat']];
+  const CATS = [['eyes', 'eyes'], ['mouths', 'mouth'], ['bits', 'ears'], ['wear', 'hat'], ['voice', 'voice']];
   let root, tray, stepBtns = [], nextBtn, rows = [], palEls = [], sizeBtns = [], eraserBtn, catBtns = [], thumbs, thumbBody = null, thumbCat = null;
   let c = null, d = null;
   const sq = { x: 0, y: 0, s: 100 };
@@ -2484,6 +2618,20 @@ const Studio = (() => {
   function buildThumbs() {
     thumbCat = st.cat; thumbBody = d.color;
     thumbs.innerHTML = ''; thumbs.scrollLeft = 0;
+    if (st.cat === 'voice') {                               // tap one to hear it say hello
+      for (const key of VOICE_LIST) {
+        const b = el('button', 'thumb voice' + (d.voice === key ? ' on' : ''), thumbs); b.type = 'button'; b.setAttribute('aria-label', 'voice-' + key);
+        const [, g] = miniCanvas(54, b);
+        drawVoiceThumb(g, key, 54);
+        b.addEventListener('click', () => {
+          Sound.unlock(); d.voice = key;
+          Sound.setVoice({ size: 0.5, seed: d.seed, style: key }); Sound.voice('hello'); c.say(0.7); c.qv -= 2.5;
+          thumbs.querySelectorAll('.voice').forEach((x) => x.classList.toggle('on', x === b));
+          if (d.outline) App.keepSoon(c);
+        });
+      }
+      return;
+    }
     for (const key of PART_TRAYS[st.cat]) {
       const b = el('button', 'thumb', thumbs); b.type = 'button'; b.setAttribute('aria-label', key);
       const [, g] = miniCanvas(54, b);
@@ -3252,7 +3400,7 @@ const World = (() => {
   const show = { on: false, amt: 0, pulse: 0, next: 0, note: 0, hue: 0 };
   const fire = { t: 0, a: 0 };
   let rocket = null, night = 0, dark = 0, shake = 0, flash = 0, time = 0, voiceSize = -1, clouds = [];
-  let place = 'meadow', amb = null, wipe = null, toy = null, pals = [], placePanel, palPanel, placeBtn, palBtn, goal = 0;
+  let place = 'meadow', amb = null, wipe = null, toy = null, pals = [], placePanel, palPanel, tunePanel, placeBtn, palBtn, goal = 0;
 
   const after = (t, fn) => timers.push({ t: time + t, fn });
   const busy = () => ai.busy || teach.rec || teach.perf || phase !== 'play';
@@ -3314,6 +3462,7 @@ const World = (() => {
     }
     placePanel = el('div', 'panel places', drawer);
     palPanel = el('div', 'panel pals', drawer);
+    tunePanel = el('div', 'panel tunes', drawer);
     dock = el('div', 'dock', root);
     snackBtn = iconBtn('snack', '', dock, 'Snacks', () => openDrawer('snacks'));
     wandBtn = iconBtn('wand', '', dock, 'Tricks', () => openDrawer('tricks'));
@@ -3336,7 +3485,7 @@ const World = (() => {
     const own = App.list.filter((x) => x.outline && x.id !== d.id).slice(0, 8);
     const met = Quest.met().filter((x) => !own.some((o) => o.id === x.id));
     const all = own.concat(met);
-    return all.length ? all.slice(0, 12) : [21, 47, 93].map((s) => makeDemo(s).d);
+    return all.length ? all.slice(0, 24) : [21, 47, 93].map((s) => makeDemo(s).d);
   }
   function drawPals() {
     palPanel.replaceChildren();
@@ -3348,12 +3497,26 @@ const World = (() => {
     });
   }
 
+  // the bands: shown while the show is on. Tap one and the music changes on the spot
+  function drawTunes() {
+    tunePanel.replaceChildren();
+    TUNE_LIST.forEach((k) => {
+      const b = el('button', 'thumb tune' + (k === d.tune ? ' on' : ''), tunePanel); b.type = 'button'; b.setAttribute('aria-label', 'tune-' + k);
+      const [, g] = miniCanvas(58, b); g.translate(2, 2); drawTuneThumb(g, k, 54);
+      b.addEventListener('click', () => {
+        if (k === d.tune) return;
+        d.tune = k; App.keep(c); drawTunes();
+        if (show.on) { Sound.music.stop(); Sound.music.start({ seed: d.seed, theme: k }); show.pulse = 1; c.setMood('happy', 1); c.hop(0, 0.9); }
+      });
+    });
+  }
   function openDrawer(which) {
     const cur = drawer.dataset.open || '';
     const next = cur === which ? '' : which;
     drawer.dataset.open = next;
     snackPanel.classList.toggle('on', next === 'snacks'); trickPanel.classList.toggle('on', next === 'tricks');
-    placePanel.classList.toggle('on', next === 'places'); palPanel.classList.toggle('on', next === 'pals');
+    placePanel.classList.toggle('on', next === 'places'); palPanel.classList.toggle('on', next === 'pals'); tunePanel.classList.toggle('on', next === 'tunes');
+    if (next === 'tunes') drawTunes();
     snackBtn.classList.toggle('on', next === 'snacks'); wandBtn.classList.toggle('on', next === 'tricks');
     placeBtn.classList.toggle('on', next === 'places'); palBtn.classList.toggle('on', next === 'pals');
     if (next === 'places') drawPlaces();
@@ -3496,7 +3659,7 @@ const World = (() => {
     d.pals = pals.map((p) => p.c.d.id);
     App.keepSoon(c);
   }
-  function palVoice(k, kind, opts) { Sound.setVoice({ size: 0.42, seed: k.d.seed }); Sound.voice(kind, opts); voiceSize = -1; }
+  function palVoice(k, kind, opts) { Sound.setVoice({ size: 0.42, seed: k.d.seed, style: k.d.voice }); Sound.voice(kind, opts); voiceSize = -1; }
   function palAt(p) { for (let i = pals.length - 1; i >= 0; i--) if (pals[i].c.hit(p.x, p.y)) return pals[i]; return null; }
   function palsCopy(trick) {
     pals.forEach((p, i) => after(0.3 + i * 0.4, () => {
@@ -3574,7 +3737,7 @@ const World = (() => {
 
   function syncVoice() {
     const v = clamp01(0.5 + Math.log2(Math.max(0.2, c.scT)) * 0.46);
-    if (Math.abs(v - voiceSize) > 0.02) { voiceSize = v; Sound.setVoice({ size: v, seed: d.seed }); }
+    if (Math.abs(v - voiceSize) > 0.02) { voiceSize = v; Sound.setVoice({ size: v, seed: d.seed, style: d.voice }); }
   }
 
   // ----- reactions -----
@@ -3797,9 +3960,10 @@ const World = (() => {
       if (c.asleep) napOver();
       show.next = 0; show.note = 0;
       Sound.music.onBeat = onBeat;
-      Sound.music.start({ seed: d.seed });
+      Sound.music.start({ seed: d.seed, theme: d.tune });
       c.setMood('happy', 1.5);
-    } else { Sound.music.stop(); Sound.music.onBeat = null; }
+      if (drawer.dataset.open !== 'tunes') openDrawer('tunes');
+    } else { Sound.music.stop(); Sound.music.onBeat = null; if (drawer.dataset.open === 'tunes') openDrawer('tunes'); }
   }
   function onBeat(beat, bar) {
     if (!show.on || App.screen !== World) return;
@@ -4200,7 +4364,7 @@ const World = (() => {
   // read-only peek for the automated play-through (test/play.mjs)
   window.__doodLink = (budget) => Codec.encode(d, budget);
   window.__doodStay = (v) => { ai.stay = v; };              // the guide recorder: do not wander off after the ball mid-picture
-  window.__dood = () => (c ? { x: c.x, y: c.y, S: c.S, fx: Object.keys(c.fx), mood: c.currentMood(), phase, busy: ai.busy, tricks: d.tricks.length, place, pals: pals.map((p) => ({ x: p.c.x, y: p.c.y })), toy: toy && { k: toy.k, x: toy.x, y: toy.y, r: toy.r }, net: amb && amb.net, asleep: c.asleep, floor: env.floor, grounded: c.standing, vx: c.vx, vy: c.vy, b: { ...c.bounds }, mouth: c.mouthPos(), face: c.facePos() } : null);
+  window.__dood = () => (c ? { x: c.x, y: c.y, S: c.S, fx: Object.keys(c.fx), mood: c.currentMood(), phase, busy: ai.busy, tricks: d.tricks.length, place, voice: d.voice, tune: d.tune, band: Sound.music.playing ? Sound.music.theme : null, pals: pals.map((p) => ({ x: p.c.x, y: p.c.y })), toy: toy && { k: toy.k, x: toy.x, y: toy.y, r: toy.r }, net: amb && amb.net, asleep: c.asleep, floor: env.floor, grounded: c.standing, vx: c.vx, vy: c.vy, b: { ...c.bounds }, mouth: c.mouthPos(), face: c.facePos() } : null);
 
   return { enter, exit, step, draw, down, move, up, resize, _beat: onBeat };
 })();
@@ -4407,33 +4571,74 @@ const QUESTS = [
   { place: 'meadow', obs: ['wall', 'pond@rain', 'log@dark'], friend: [95, [['crown', 0, 0.98]]] },
   { place: 'stage', obs: ['rock@dark', 'gap', 'cloud', 'wall', 'ice@dark'], friend: [7, [['hat', 0, 1], ['bow', 180, 0.1, '#FFC928']]] },
 ];
+// The number pond: stepping stones and hop jellies. hop = [the friend's stone, plates, jellies on offer, the last stone]
+// A jelly with a 3 on it is three hops forward; a blue one hops back. The hops have to end exactly on the friend's big pad.
+const PONDS = [
+  { place: 'meadow', hop: [3, 1, [1, 2, 3, 4, 5], 5], friend: [111, [['flower', -40, 0.96]]] },
+  { place: 'meadow', hop: [5, 1, [2, 3, 4, 5, 6], 7], friend: [123, [['cap', 0, 1, '#FF5A4E']]] },
+  { place: 'beach', hop: [6, 2, [1, 2, 3, 4, 5], 8], friend: [134, [['glasses', 0, 0.2]]] },
+  { place: 'beach', hop: [7, 2, [2, 3, 4], 9], friend: [145, [['toque', 0, 1, '#35B6F2']]] },
+  { place: 'snow', hop: [9, 2, [3, 4, 5, 6], 11], friend: [156, [['earmuffs', 0, 0.72]]] },
+  { place: 'snow', hop: [8, 3, [2, 3], 10], friend: [167, [['toque', 0, 1, '#9BD93A'], ['scarf', 180, 0.62, '#FF5A4E']]] },
+  { place: 'night', hop: [4, 2, [5, 6, -1, -2], 7], friend: [178, [['headscarf', 0, 0.5, '#35B6F2']]] },
+  { place: 'night', hop: [3, 2, [7, 8, -4, -5], 9], friend: [189, [['headphones', 0, 0.78]]] },
+  { place: 'space', hop: [10, 2, [5], 12], friend: [191, [['helmet', 0, 0.8]]] },
+  { place: 'space', hop: [12, 3, [3, 4, 5], 14], friend: [202, [['patka', 0, 0.74, '#9BD93A']]] },
+  { place: 'meadow', hop: [6, 3, [9, 4, -1, -2], 10], friend: [213, [['crown', 0, 0.98]]] },
+  { place: 'stage', hop: [15, 3, [4, 5, 6, 7], 16], friend: [224, [['hat', 0, 1], ['bow', 180, 0.1, '#FF6FB5']]] },
+];
+const WORLDS = [QUESTS, PONDS];
+const HOP_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, -1, -2, -4, -5];
+const HOP_COLORS = ['#FF9433', '#FF6FB5', '#9BD93A', '#FFC928', '#8E5CF2', '#FF5A4E', '#2CC295', '#3F6BF0', '#B565D9'];
+// a hop jelly: a gumdrop with its number on it and a little arrow for which way it hops
+function drawHop(g, n, x, y, r) {
+  const back = n < 0, col = back ? '#35B6F2' : HOP_COLORS[(n - 1) % 9];
+  g.save(); g.translate(x, y); g.lineJoin = g.lineCap = 'round';
+  g.fillStyle = col; g.strokeStyle = INK; g.lineWidth = r * 0.11;
+  g.beginPath(); g.moveTo(-r * 0.92, r * 0.62); g.bezierCurveTo(-r * 1.05, -r * 0.5, -r * 0.6, -r * 0.98, 0, -r * 0.98); g.bezierCurveTo(r * 0.6, -r * 0.98, r * 1.05, -r * 0.5, r * 0.92, r * 0.62); g.quadraticCurveTo(0, r * 1.02, -r * 0.92, r * 0.62); g.closePath(); g.fill(); g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = r * 0.12; g.beginPath(); g.arc(0, -r * 0.1, r * 0.7, Math.PI * 1.12, Math.PI * 1.4); g.stroke();
+  g.font = `900 ${Math.round(r * 1.2)}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.strokeStyle = INK; g.lineWidth = r * 0.2; g.strokeText(String(Math.abs(n)), back ? r * 0.14 : -r * 0.14, r * 0.08);
+  g.fillStyle = '#fff'; g.fillText(String(Math.abs(n)), back ? r * 0.14 : -r * 0.14, r * 0.08);
+  const d = back ? -1 : 1; g.fillStyle = '#fff'; g.strokeStyle = INK; g.lineWidth = r * 0.08;
+  g.beginPath(); g.moveTo(d * r * 0.5, -r * 0.2); g.lineTo(d * r * 0.82, r * 0.08); g.lineTo(d * r * 0.5, r * 0.36); g.closePath(); g.fill(); g.stroke();
+  g.restore();
+}
+const PLACE_TUNE = { meadow: 'pop', snow: 'chip', rink: 'pop', beach: 'beach', night: 'dream', space: 'chip', sea: 'beach', stage: 'funk' };
 const FX_OF = {}; SNACK_LIST.forEach((s) => (FX_OF[s.k] = s.fx));
 const SNACK_OF = {}; SNACK_LIST.forEach((s) => (SNACK_OF[s.fx] = s.k));
 
 const Quest = (() => {
-  let root, bar, goBtn, snackEls = [];
+  let root, bar, goBtn, worldBtn, snackEls = [], hopEls = {};
+  let world = 0, hopL = null;
   let c = null, d = null, fxp = null, mode = 'map', lv = 0, time = 0;
   let S = 60, bS = 100, F = 0, cam = 0, panT = 0, L = 0, startX = 0, goalX = 0;
   let obs = [], plates = [], active = -1, fly = [], pal = null, backdrop = null, amb = null, place = 'meadow', theme = null;
   let script = null, waitT = 0, waitFn = null, breath = 0, hint = null, oops = false, ptr = null, idle = 0, flash = 0, shake = 0, won = 0;
   const env = { g: 2400, floor: 0, left: 0, right: 0, top: -4000 };
   const map = { nodes: [], R: 40, friends: [], thumbs: {}, bg: null, hop: 0, arrive: -1 };
-  let done = [];
-  try { const s = JSON.parse(localStorage.getItem('doodlings.trail.v1') || 'null'); if (s && Array.isArray(s.done)) done = s.done.map(Boolean); } catch (e) { /* no storage: the trail still works, it just forgets */ }
-  const saveDone = () => { try { localStorage.setItem('doodlings.trail.v1', JSON.stringify({ done })); } catch (e) { /* ignore */ } };
+  const doneAll = [[], []];                                // the snack trail, the number pond
+  try { const s = JSON.parse(localStorage.getItem('doodlings.trail.v1') || 'null'); if (s && Array.isArray(s.done)) doneAll[0] = s.done.map(Boolean); if (s && Array.isArray(s.pond)) doneAll[1] = s.pond.map(Boolean); } catch (e) { /* no storage: the trail still works, it just forgets */ }
+  let done = doneAll[0];
+  const saveDone = () => { try { localStorage.setItem('doodlings.trail.v1', JSON.stringify({ done: doneAll[0], pond: doneAll[1] })); } catch (e) { /* ignore */ } };
+  const LV = () => WORLDS[world];
 
   const friends = [];
-  function friend(i) {
-    if (!friends[i]) { const [seed, wear] = QUESTS[i].friend; friends[i] = makeDemo(seed, wear); }
-    return friends[i];
+  function friendOf(w, i) {
+    const k = w * 100 + i;
+    if (!friends[k]) { const [seed, wear] = WORLDS[w][i].friend; friends[k] = makeDemo(seed, wear); }
+    return friends[k];
   }
-  const met = () => QUESTS.map((q, i) => (done[i] ? friend(i).d : null)).filter(Boolean);
+  const friend = (i) => friendOf(world, i);
+  const met = () => WORLDS.flatMap((list, w) => list.map((q, i) => (doneAll[w][i] ? friendOf(w, i).d : null))).filter(Boolean);
+  function setWorld(w) { world = w; done = doneAll[w]; setIcon(worldBtn, w ? 'flag' : 'pond'); openMap(); }
 
   // ----- DOM -----
   function build() {
     root = el('div', 'screen quest', App.ui);
     const top = el('div', 'topbar', root);
     iconBtn('back', 'ghost', top, 'Back', () => { Sound.sfx('page'); if (mode === 'map') App.go('world', { critter: c, from: 'home' }); else openMap(); });
+    worldBtn = iconBtn('pond', 'primary worldbtn', top, 'Number pond', () => { Sound.sfx('page'); setWorld(world ? 0 : 1); });
     bar = el('div', 'questbar', root);
     const tray = el('div', 'snacks', bar);
     SNACK_LIST.forEach((s, i) => {
@@ -4442,6 +4647,14 @@ const Quest = (() => {
       g.translate(29, 29); g.scale(22, 22); Snacks[s.k](g, { t: 0, lw: 2.6 / 22 });
       b.addEventListener('click', () => { Sound.unlock(); putSnack(s.k, b); });
       snackEls.push(b);
+    });
+    const hops = el('div', 'hops', bar);
+    HOP_VALUES.forEach((n, i) => {
+      const b = el('button', 'thumb snack hop', hops); b.type = 'button'; b.setAttribute('aria-label', 'hop ' + n); b.style.setProperty('--i', i);
+      const [, g] = miniCanvas(58, b);
+      drawHop(g, n, 29, 29, 23);
+      b.addEventListener('click', () => { Sound.unlock(); putSnack('h' + n, b); });
+      hopEls[n] = b; snackEls.push(b);
     });
     goBtn = iconBtn('play', 'primary go', bar, 'Go', go);
   }
@@ -4452,18 +4665,20 @@ const Quest = (() => {
     F = env.floor = H < 560 ? H - 150 : H - (W <= 720 ? 270 : 196);
     bS = clamp(Math.min(W, H * 0.8) * 0.17, 46, 150);
     // short trails are drawn bigger, so they fill the screen
+    const q = LV()[lv];
     let units = 2.2 + 1.4 + 2.4;
-    for (const spec of QUESTS[lv].obs) { const [t, zone] = spec.split('@'); units += (zone ? 2 : 1) * 1.75 + 1.7 + (zone ? 2 : 0) + OBS[t].w + 1.1; }
-    S = clamp(W / units, bS * 0.62, bS * 0.92);
+    if (q.hop) units = 2.2 + q.hop[1] * 1.6 + 1.9 + 0.75 + (q.hop[3] - 1) * 1.12 + 1.25 + 0.85 + 2.6;
+    else for (const spec of q.obs) { const [t, zone] = spec.split('@'); units += (zone ? 2 : 1) * 1.75 + 1.7 + (zone ? 2 : 0) + OBS[t].w + 1.1; }
+    S = clamp(W / units, bS * (q.hop ? 0.5 : 0.62), bS * 0.92);
     env.g = S * 24;
   }
   function buildCourse(keep) {
-    const q = QUESTS[lv], u = (v) => v * S;
+    const q = LV()[lv], u = (v) => v * S;
     layout();
     place = q.place; theme = worldTheme(d.color);
     let x = 2.2; startX = u(x);
-    plates = [];
-    obs = q.obs.map((spec, i) => {
+    plates = []; hopL = null;
+    obs = (q.obs || []).map((spec, i) => {
       const [t, zone] = spec.split('@'), def = OBS[t], o = { t, i, dark: zone === 'dark' || t === 'cave', rain: zone === 'rain' || t === 'cloud', anim: 0, zanim: 0, push: 0, done: false, fails: 0, seed: i * 7 + lv };
       o.needs = [];
       if (zone === 'dark') o.needs.push('glow');
@@ -4477,6 +4692,15 @@ const Quest = (() => {
       return o;
     });
     x += 1.4; goalX = u(x); L = env.right = u(x + 2.4); env.left = 0;
+    if (q.hop) {                                            // plates on the bank, then stones across the water
+      const [to, np, jellies, end] = q.hop;
+      x = 2.2;
+      for (let i = 0; i < np; i++) { x += 1.6; plates.push({ x: u(x), k: null, eaten: false, pop: 0 }); }
+      x += 1.9;
+      const x0 = u(x), sx = (i) => x0 + S * (0.75 + (i - 1) * 1.12 + (i > to ? 1.25 : 0));
+      hopL = { to, end, jellies, x0, sx, x1: sx(end) + S * 0.85, fails: 0, lit: 0, sink: 0, count: null, queue: [], qi: -1, hintN: 0, pos: 0 };
+      goalX = sx(to) + S * 1.3; L = env.right = hopL.x1 + S * 2.6;
+    }
     if (keep) keep.forEach((k, i) => { if (plates[i]) plates[i].k = k; });
     // three layers: the sky stays put, the land scrolls by, and (on the stage) the curtains hang in front
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -4499,7 +4723,8 @@ const Quest = (() => {
     c.baseS = S; c.x = startX; c.y = F - S * 2.2; c.vx = c.vy = c.av = 0; c.ang = 0; c.lookAt = null;
     for (const o of obs) { o.anim = 0; o.zanim = 0; o.push = 0; o.done = false; }
     for (const p of plates) p.eaten = false;
-    Sound.setVoice({ size: 0.5, seed: d.seed });
+    if (hopL) Object.assign(hopL, { lit: 0, sink: 0, count: null, queue: [], qi: -1, hintN: 0, pos: 0 });
+    Sound.setVoice({ size: 0.5, seed: d.seed, style: d.voice });
     setMode('plan');
     active = plates.findIndex((p) => !p.k);
   }
@@ -4515,8 +4740,10 @@ const Quest = (() => {
   }
 
   function start(i) {
-    lv = clamp(i, 0, QUESTS.length - 1);
+    lv = clamp(i, 0, LV().length - 1);
     buildCourse();
+    bar.classList.toggle('math', !!hopL);
+    for (const n of HOP_VALUES) hopEls[n].hidden = !(hopL && hopL.jellies.includes(n));
     c.refreshParts();
     c.onLand = (hit) => { if (hit > 380) Sound.sfx(c.fx.bouncy ? 'boing' : 'squish', { gain: clamp(hit / 1800, 0.2, 0.7) }); };
     c.onWall = null; c.onFxEnd = null; c.onHop = () => Sound.sfx('hop', { gain: 0.4 });
@@ -4555,9 +4782,9 @@ const Quest = (() => {
     idle = 0; active = -1;
     setMode('run');
     Sound.sfx('learn', { gain: 0.5 });
-    Sound.music.onBeat = null; Sound.music.start({ seed: d.seed + lv * 3 });
+    Sound.music.onBeat = null; Sound.music.start({ seed: d.seed + lv * 3, theme: PLACE_TUNE[place] });
     c.setMood('happy', 1); Sound.voice('whee'); c.say(0.3);
-    script = run(); waitT = 0.25; waitFn = null;
+    script = hopL ? runHop() : run(); waitT = 0.25; waitFn = null;
   }
   function drive(dt) {
     if (!script) return;
@@ -4630,13 +4857,13 @@ const Quest = (() => {
       case 'ice': Sound.sfx('freeze'); Sound.voice('brr'); break;
       case 'bouncy': Sound.sfx('boing'); c.setMood('happy', 1); c.hop(0, 0.9); break;
     }
-    Sound.setVoice({ size: clamp01(0.5 + Math.log2(c.scT) * 0.46), seed: d.seed });
+    Sound.setVoice({ size: clamp01(0.5 + Math.log2(c.scT) * 0.46), seed: d.seed, style: d.voice });
   }
   function spend(names) {
     let any = false;
     for (const n of names) if (c.fx[n]) { delete c.fx[n]; any = true; }
     if (!c.fx.giant && !c.fx.tiny) c.scT = 1;
-    Sound.setVoice({ size: 0.5, seed: d.seed });
+    Sound.setVoice({ size: 0.5, seed: d.seed, style: d.voice });
     if (any) fxp.burst('puff', c.x, c.y, 5, { speed: 150, size: c.S * 0.22, life: 0.5, color: 'rgba(255,255,255,0.85)', drag: 3 });
   }
 
@@ -4660,7 +4887,20 @@ const Quest = (() => {
     },
     *cave(o) { c.setMood('happy', 1); yield* moveTo(o.x1 + S * 0.7); },
     *cloud(o) { yield* moveTo(o.x1 + S * 0.7); },
-    *log(o) { Sound.sfx('swipe', { gain: 0.4 }); yield* moveTo(o.ox1 + S * 0.8); },
+    *log(o) {
+      yield* moveTo(o.ox0 - S * 0.95); yield* settle();
+      const y = F - S * 0.56;
+      Sound.sfx('swipe', { gain: 0.4 }); yield* glide(o.ox0 + S * 0.25, y, 0.32, S * 0.2);   // in through the opening
+      for (let t = 0; t < 1; t += App.dt) {                 // along the inside: the log bulges as it goes
+        o.anim = clamp01(t / 0.95); c.kin = { x: lerp(o.ox0 + S * 0.25, o.ox1, o.anim), y, a: 0 };
+        if (Math.floor(t * 6) !== Math.floor((t - App.dt) * 6)) { Sound.sfx('tap', { pitch: -6 + o.anim * 8, gain: 0.6 }); shake = 2; }
+        yield 0;
+      }
+      o.anim = 0; c.kin = null;
+      Sound.sfx('poof', { gain: 0.5 }); fxp.burst('puff', o.ox1 + S * 0.4, y, 6, { speed: 160, size: S * 0.2, life: 0.5, color: 'rgba(255,255,255,0.85)', drag: 3 });
+      yield* glide(o.ox1 + S * 1.1, restY(), 0.34, S * 0.5);
+      c.setMood('happy', 0.8);
+    },
     *wall(o) {
       yield* moveTo(o.ox0 - S * 1.5); yield* settle();
       const y = restY();
@@ -4749,18 +4989,21 @@ const Quest = (() => {
       Sound.sfx('sparkle', { gain: 0.6 });
       yield 0.15;
     }
-    // the friend at the end
     yield* moveTo(goalX - S * 2.1);
+    yield* meet();
+  }
+  // the friend at the end
+  function* meet() {
     Sound.music.stop();
     const first = !done[lv];
-    pal.asleep = false; pal.setMood('wide', 0.6); Sound.setVoice({ size: 0.42, seed: pal.d.seed }); Sound.voice(first ? 'pop' : 'hello'); pal.say(0.4); pal.qv += 4;
+    pal.asleep = false; pal.setMood('wide', 0.6); Sound.setVoice({ size: 0.42, seed: pal.d.seed, style: pal.d.voice }); Sound.voice(first ? 'pop' : 'hello'); pal.say(0.4); pal.qv += 4;
     yield 0.5;
     setMode('win'); won = 0.001; flash = 0.5;
     Sound.sfx('learn'); Sound.sfx('confetti');
     fxp.burst('confetti', (c.x + pal.x) / 2, F - S * 2, 60, { angle: -Math.PI / 2, spread: 1.3, speed: 800, size: 12, life: 2.4, colors: PALETTE.slice(0, 9), g: 900, drag: 1.4 });
     Sound.voice('hello'); pal.say(0.7); pal.setMood('happy', 3);
     yield 0.35;
-    Sound.setVoice({ size: 0.5, seed: d.seed }); Sound.voice('tada'); c.say(0.7); c.setMood('proud', 3);
+    Sound.setVoice({ size: 0.5, seed: d.seed, style: d.voice }); Sound.voice('tada'); c.say(0.7); c.setMood('proud', 3);
     for (let i = 0; i < 3; i++) {
       c.hop(0, 1); pal.hop(0, 0.9);
       fxp.burst('heart', (c.x + pal.x) / 2, F - S * 2.2, 3, { angle: -Math.PI / 2, spread: 0.9, speed: 150, size: 16, life: 1.2, color: '#FF6FB5', vr: 0, drag: 1.5 });
@@ -4771,6 +5014,78 @@ const Quest = (() => {
     openMap(lv);
   }
 
+  // ----- the number pond: eat the jellies, then hop them out one stone at a time -----
+  function* eatHop(p) {
+    p.eaten = true; c.mouthHold = 1; c.lookAt = { x: p.x, y: F - S * 0.4 };
+    fly.push({ k: p.k, x0: p.x, y0: F - S * 0.42, eat: true, t: 0 });
+    Sound.sfx('whoosh', { gain: 0.3 });
+    yield 0.2;
+    c.mouthHold = 0; c.say(0.4); Sound.voice('munch'); c.qv -= 1.8;
+    yield 0.18;
+    Sound.voice('gulp'); c.qv += 2.6;
+    yield 0.2;
+    hopL.queue.push(+p.k.slice(1)); Sound.sfx('pick', { pitch: hopL.queue.length * 2 });
+    yield 0.3;
+  }
+  function* runHop() {
+    const h = hopL, bank = h.x0 - S * 0.55;
+    for (const p of plates) { yield* moveTo(p.x - c.S * 0.95); if (p.k) { yield* settle(); yield* eatHop(p); } }
+    yield* moveTo(bank); yield* settle();
+    if (!h.queue.length) { yield* failHop(false); return; }
+    const y = restY();
+    for (let qi = 0; qi < h.queue.length; qi++) {
+      const n = h.queue[qi], dir = n < 0 ? -1 : 1;
+      h.qi = qi;
+      yield 0.35;
+      for (let i = 0; i < Math.abs(n); i++) {
+        const next = h.pos + dir;
+        if (next < 0) { Sound.sfx('thud', { gain: 0.4 }); c.qv -= 3; shake = 4; yield 0.25; continue; }    // nowhere further back to go
+        const over = next > h.end, tx = over ? h.x1 + S * 0.25 : next === 0 ? bank : h.sx(next);
+        c.lookAt = { x: tx + dir * S * 2, y: F - S };
+        Sound.sfx('hop', { gain: 0.7 });
+        yield* glide(tx, over ? F + S * 1.4 : y, over ? 0.42 : 0.3, S * 0.95);
+        h.pos = next;
+        if (over) { c.kin = { x: tx, y: F + S * 1.4, a: 0 }; yield* failHop(true); return; }
+        h.lit = next; h.count = { n: i + 1, t: 0 }; c.qv -= 3; Sound.sing(Math.min(9, i));
+        if (next > 0) fxp.emit('ring', tx, F, { size: S * 1.1, life: 0.35, color: 'rgba(255,255,255,0.9)' });
+        yield 0.13;
+      }
+      h.queue[qi] = 0;
+      yield 0.3;
+    }
+    h.qi = -1; h.count = null;
+    if (h.pos === h.to) { c.lookAt = { x: goalX, y: F - S }; yield* meet(); return; }
+    yield* failHop(false);
+  }
+  // not on the friend's pad: a look around, then the stone gives way. Too far: straight into the water
+  function* failHop(over) {
+    const h = hopL;
+    Sound.music.stop(); oops = true; h.count = null; h.qi = -1;
+    if (!over) {
+      c.lookAt = { x: goalX, y: F - S }; c.setMood('wide', 1.4); Sound.voice('question'); c.say(0.3);
+      yield 0.8;
+      if (h.pos > 0) { const x = c.x; h.sink = 1; Sound.sfx('swipe', { gain: 0.4 }); yield* glide(x, F + S * 1.5, 0.4); c.kin = { x, y: F + S * 1.5, a: 0 }; }
+    } else h.sink = 1;
+    if (h.sink) {
+      Sound.sfx('drop'); Sound.voice('brr'); shake = 5;
+      fxp.burst('dot', c.x, F, 16, { angle: -Math.PI / 2, spread: 1.3, speed: 420, size: 6, life: 0.7, color: '#BEE8FF', g: 1400 });
+      yield 0.6;
+    }
+    Sound.sfx('error'); h.fails++;
+    yield 0.4;
+    if (h.fails >= 2) {                                     // a hint: count the stones out to the friend, one by one
+      hint = { hop: true, t: 0 };
+      for (let i = 1; i <= h.to; i++) { h.hintN = i; Sound.sing(Math.min(9, i - 1)); yield 0.3; }
+      yield 1.1;
+      hint = null;
+    }
+    fxp.burst('puff', c.x, Math.min(c.y, F - S * 0.5), 10, { speed: 220, size: c.S * 0.34, life: 0.6, color: '#fff', drag: 3 }); Sound.sfx('poof');
+    resetRun();
+    for (const p of plates) { p.k = null; p.pop = 1; }
+    active = 0; syncBar();
+    fxp.burst('puff', c.x, c.y, 8, { speed: 180, size: S * 0.3, life: 0.5, color: '#fff', drag: 3 });
+  }
+
   // ----- the trail map -----
   function openMap(arrive = -1) {
     Sound.music.stop();
@@ -4779,34 +5094,40 @@ const Quest = (() => {
     setMode('map');
     layoutMap();
     map.arrive = arrive; map.t = 0;
-    const next = done.findIndex((v, i) => i < QUESTS.length && !v), n = QUESTS.length;
-    map.at = arrive >= 0 ? arrive : (next < 0 || next >= n ? (done.length >= n ? n - 1 : done.length) : next);
+    const n = LV().length; let next = LV().findIndex((q, i) => !done[i]);
+    worldBtn.classList.toggle('glow', world === 0 && doneAll[0].some(Boolean) && !doneAll[1].some(Boolean));
+    map.at = arrive >= 0 ? arrive : next < 0 ? n - 1 : next;
     map.next = arrive >= 0 ? Math.min(n - 1, arrive + 1) : map.at;
     if (arrive >= 0 && arrive === n - 1) map.party = 0.001; else map.party = 0;
     fxp.clear();
   }
   function layoutMap() {
-    const W = App.W, H = App.H, n = QUESTS.length;
+    const W = App.W, H = App.H, n = LV().length;
     const cols = W / H > 1.55 ? 6 : W / H > 0.85 ? 4 : 3, rows = n / cols;
     const padT = 78, padB = 30, cellW = W / cols, cellH = (H - padT - padB) / rows;
     map.R = clamp(Math.min(cellW * 0.27, cellH * 0.3), 22, 62);
-    map.nodes = QUESTS.map((q, i) => {
+    map.nodes = LV().map((q, i) => {
       const row = Math.floor(i / cols), col = row % 2 ? cols - 1 - (i % cols) : i % cols;
       return { x: cellW * (col + 0.42), y: H - padB - cellH * (row + 0.42) - Math.sin(col * 1.9 + row) * cellH * 0.08, q, i };
     });
-    for (const q of QUESTS) if (!map.thumbs[q.place]) map.thumbs[q.place] = Places.thumb(q.place, 120, worldTheme(PALETTE[2]));
+    for (const q of LV()) if (!map.thumbs[q.place]) map.thumbs[q.place] = Places.thumb(q.place, 120, worldTheme(PALETTE[2]));
     // the painted journey: meadow at the bottom, the stars at the top
     const dpr = Math.min(2, window.devicePixelRatio || 1), cv = (map.bg = document.createElement('canvas'));
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const gr = g.createLinearGradient(0, 0, 0, H);
-    [[0, '#1B1650'], [0.2, '#4B3A9A'], [0.4, '#F3A7C4'], [0.55, '#FFE3B8'], [0.7, '#BFE8F7'], [1, '#C8EFA4']].forEach(([s, col]) => gr.addColorStop(s, col));
+    (world ? [[0, '#123A63'], [0.25, '#2377A8'], [0.5, '#63C2E0'], [0.75, '#A6E6D0'], [1, '#C8EFA4']] : [[0, '#1B1650'], [0.2, '#4B3A9A'], [0.4, '#F3A7C4'], [0.55, '#FFE3B8'], [0.7, '#BFE8F7'], [1, '#C8EFA4']]).forEach(([s, col]) => gr.addColorStop(s, col));
     g.fillStyle = gr; g.fillRect(0, 0, W, H);
     const r = rng(77), U = Math.min(W, H) / 10;
     for (let i = 0; i < 70; i++) { g.fillStyle = `rgba(255,255,255,${0.3 + r() * 0.7})`; g.beginPath(); g.arc(r() * W, r() * H * 0.3, 0.7 + r() * 1.7, 0, TAU); g.fill(); }
     g.fillStyle = '#FFF6D0'; g.beginPath(); g.arc(W * 0.86, H * 0.11, U * 0.55, 0, TAU); g.fill(); g.fillStyle = '#2A2468'; g.beginPath(); g.arc(W * 0.86 - U * 0.22, H * 0.11 - U * 0.1, U * 0.48, 0, TAU); g.fill();
     const band = (y, amp, col, f, ph) => { g.fillStyle = col; g.beginPath(); g.moveTo(0, H); for (let x = 0; x <= W + 10; x += 10) g.lineTo(x, y - amp * (0.6 * Math.sin((x / W) * f + ph) + 0.4 * Math.sin((x / W) * f * 2.3 + ph * 2))); g.lineTo(W, H); g.fill(); };
-    band(H * 0.36, U * 0.5, '#6C5BB8', 5, 1); band(H * 0.47, U * 0.5, '#E9EEFF', 6, 2.2); band(H * 0.6, U * 0.4, '#FFE7B0', 4, 0.6); band(H * 0.74, U * 0.4, '#A9E3A0', 5, 3.3); band(H * 0.88, U * 0.4, '#8BD58C', 4, 5);
+    if (world) {                                            // the pond: bands of water, lily pads, reeds at the bottom
+      band(H * 0.3, U * 0.4, '#2E86C0', 5, 1); band(H * 0.46, U * 0.4, '#3FA0D6', 6, 2.2); band(H * 0.62, U * 0.4, '#59B9E6', 4, 0.6); band(H * 0.78, U * 0.4, '#7DD0EC', 5, 3.3); band(H * 0.93, U * 0.3, '#8BD58C', 4, 5);
+      for (let i = 0; i < 16; i++) { const x = r() * W, y = H * (0.2 + r() * 0.66), s = U * (0.25 + r() * 0.3); g.fillStyle = r() < 0.5 ? '#5FC27A' : '#6CCB86'; g.strokeStyle = '#2F8F5F'; g.lineWidth = 2; g.beginPath(); g.ellipse(x, y, s, s * 0.42, 0, 0.5, TAU - 0.2); g.lineTo(x, y); g.closePath(); g.fill(); g.stroke(); if (r() < 0.4) { g.fillStyle = '#FF9BC8'; g.beginPath(); g.arc(x - s * 0.3, y - s * 0.1, s * 0.16, 0, TAU); g.fill(); } }
+    } else {
+      band(H * 0.36, U * 0.5, '#6C5BB8', 5, 1); band(H * 0.47, U * 0.5, '#E9EEFF', 6, 2.2); band(H * 0.6, U * 0.4, '#FFE7B0', 4, 0.6); band(H * 0.74, U * 0.4, '#A9E3A0', 5, 3.3); band(H * 0.88, U * 0.4, '#8BD58C', 4, 5);
+    }
     // the path itself
     g.lineCap = g.lineJoin = 'round';
     const trace = () => { g.beginPath(); map.nodes.forEach((nd, i) => { if (!i) g.moveTo(nd.x, nd.y); else { const p = map.nodes[i - 1]; g.bezierCurveTo(p.x + (nd.x - p.x) * 0.5, p.y, p.x + (nd.x - p.x) * 0.5, nd.y, nd.x, nd.y); } }); };
@@ -4886,7 +5207,7 @@ const Quest = (() => {
   const camTarget = () => {
     const W = App.W;
     if (L <= W) return (L - W) / 2;
-    const fx = mode === 'plan' ? (active >= 0 ? plates[active].x + S : c.x + S * 2) : c.x + S * 1.6;
+    const fx = hopL && hopL.hintN ? hopL.sx(hopL.hintN) + S : mode === 'plan' ? (active >= 0 ? plates[active].x + S : c.x + S * 2) : c.x + S * 1.6;
     return clamp(fx - W * 0.46, 0, L - W);
   };
 
@@ -4916,6 +5237,7 @@ const Quest = (() => {
     if (pal.asleep && Math.random() < dt * 0.3) fxp.emit('zzz', pal.x + S * 0.6, pal.y - S, { vy: -40, vx: 14, size: 12, life: 2.2, color: INK, vr: 0 });
     amb.step(dt, { x: c.x - cam, y: c.y, S: c.S });
     if (hint) hint.t += dt;
+    if (hopL && hopL.count) hopL.count.t += dt;
     if (won > 0) won += dt;
     if (panT > 0) panT -= dt; else cam = damp(cam, camTarget(), mode === 'plan' ? 3.2 : 4.5, dt);
     shake = Math.max(0, shake - dt * 40); flash = Math.max(0, flash - dt * 1.6);
@@ -4923,7 +5245,53 @@ const Quest = (() => {
 
   // ----- drawing the things in the way -----
   const snackAt = (g, k, x, y, r, rot) => { g.save(); g.translate(x, y); g.rotate(rot || 0); g.scale(r, r); Snacks[k](g, { t: time, lw: 3 / r }); g.restore(); };
+  const itemAt = (g, k, x, y, r, rot) => { if (k[0] !== 'h') { snackAt(g, k, x, y, r, rot); return; } g.save(); g.translate(x, y); g.rotate(rot || 0); drawHop(g, +k.slice(1), 0, 0, r * 1.1); g.restore(); };
   const lw = () => Math.max(2.5, S * 0.05);
+  // the water and its stepping stones. Every stone carries its number; the friend's pad is the big one
+  const WATER = { space: ['#3A2D6B', '#120D2B'], night: ['#2B6CB8', '#143A73'], snow: ['#8AD3F2', '#3E9CCB'] };
+  const STONE = { space: ['#C4BFD3', '#544E6B'], snow: ['#F3FCFF', '#3E9CCB'] };
+  function drawPond(g) {
+    const h = hopL, H = App.H, top = F - bS * 0.12, [w0, w1] = WATER[place] || ['#59C3F0', '#2E86D0'], [fill, edge] = STONE[place] || ['#63C77E', '#2F8F5F'];
+    const p = new Path2D(); p.moveTo(h.x0, top);
+    for (let y = top; y <= H + 8; y += 8) p.lineTo(h.x0 - ((y - top) / (H - top)) * S * 0.3 + Math.sin(y * 0.09) * 4, y);
+    for (let y = H + 8; y >= top; y -= 8) p.lineTo(h.x1 + ((y - top) / (H - top)) * S * 0.3 + Math.sin(y * 0.08 + 2) * 4, y);
+    p.closePath();
+    const gr = g.createLinearGradient(0, top, 0, H); gr.addColorStop(0, w0); gr.addColorStop(1, w1);
+    g.fillStyle = gr; g.fill(p);
+    g.save(); g.clip(p);
+    g.strokeStyle = place === 'space' ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.5)'; g.lineWidth = 2.5; g.lineCap = 'round';
+    for (let i = 0; i < 26; i++) { const y = top + S * 0.9 + ((i * 53) % 100) / 100 * (H - top - S), sx = h.x0 + ((i * 37) % 100) / 100 * (h.x1 - h.x0) + Math.sin(time * 1.2 + i) * 6; g.beginPath(); if (place === 'space') g.arc(sx, y, 1.6, 0, TAU); else { g.moveTo(sx, y); g.lineTo(sx + S * 0.4, y); } g.stroke(); }
+    g.restore();
+    g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = lw(); g.lineJoin = 'round'; g.stroke(p);
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let i = 1; i <= h.end; i++) {
+      const goal = i === h.to, x = h.sx(i), cx = goal ? x + S * 0.62 : x, rx = goal ? S * 1.2 : S * 0.5, on = h.lit === i || (h.hintN >= i), bob = Math.sin(time * 1.6 + i) * S * 0.02;
+      g.save(); g.translate(cx, F + S * 0.04 + bob);
+      g.fillStyle = 'rgba(20,30,70,0.2)'; g.beginPath(); g.ellipse(0, S * 0.12, rx, S * 0.16, 0, 0, TAU); g.fill();
+      g.fillStyle = goal ? mix(fill, '#FFC928', 0.55) : on ? mix(fill, '#FFF6B0', 0.6) : fill; g.strokeStyle = edge; g.lineWidth = lw() * 0.9;
+      g.beginPath();
+      if (place === 'snow' || place === 'space') { for (let j = 0; j < 8; j++) { const a = (j / 8) * TAU, rr = 1 + 0.12 * Math.sin(j * 2.3 + i); g.lineTo(Math.cos(a) * rx * rr, Math.sin(a) * S * 0.17 * rr); } g.closePath(); }
+      else { g.ellipse(0, 0, rx, S * 0.17, 0, 0.35, TAU - 0.1); g.lineTo(rx * 0.25, 0); g.closePath(); }
+      g.fill(); g.stroke();
+      g.restore();
+      // its number, floating just in front
+      const big = goal || on, fs = S * (big ? 0.5 : 0.36), ny = F + S * 0.56;
+      if (goal) { g.fillStyle = '#FFC928'; g.strokeStyle = INK; g.lineWidth = lw() * 0.8; g.beginPath(); g.arc(x, ny, fs * 0.78 * (1 + 0.05 * Math.sin(time * 4)), 0, TAU); g.fill(); g.stroke(); }
+      g.font = `900 ${Math.round(fs)}px ${FONT}`; g.lineWidth = Math.max(3, fs * 0.22); g.strokeStyle = goal ? 'rgba(0,0,0,0)' : 'rgba(20,40,90,0.55)'; g.fillStyle = goal ? INK : on ? '#FFF6B0' : '#fff';
+      if (!goal) g.strokeText(String(i), x, ny + fs * 0.04);
+      g.fillText(String(i), x, ny + fs * 0.04);
+    }
+  }
+  // what is still to hop, carried above the head; and the count, out loud, as each hop lands
+  function drawHops(g) {
+    const h = hopL, left = h.queue.map((n, i) => [n, i]).filter(([n]) => n), r = Math.max(15, S * 0.36), top = c.bounds.minY - r * 1.9;
+    left.forEach(([n, i], j) => { const cur = i === h.qi, x = c.x + (j - (left.length - 1) / 2) * r * 2.3; drawHop(g, n, x, top - (cur ? Math.abs(Math.sin(time * 7)) * S * 0.12 : 0), r * (cur ? 1.2 : 0.95)); });
+    if (h.count) {
+      const k = ease.back(clamp01(h.count.t * 7)), fs = S * 0.95 * k, y = top - S * (left.length ? 1.0 : 0.5);
+      g.font = `900 ${Math.round(fs)}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+      g.strokeStyle = INK; g.lineWidth = fs * 0.2; g.strokeText(String(h.count.n), c.x, y); g.fillStyle = '#FFC928'; g.fillText(String(h.count.n), c.x, y);
+    }
+  }
   const ART = {
     ice(g, o) {
       const x0 = o.ox0, w = o.ox1 - o.ox0, k = 1 - ease.inOut(o.anim), h = S * 2.5 * k, cx = x0 + w / 2;
@@ -5003,24 +5371,37 @@ const Quest = (() => {
       g.restore();
       g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = lw(); g.lineJoin = 'round'; g.stroke(p);
     },
-    log(g, o, front) {
-      if (!front) return;
-      const x0 = o.ox0, x1 = o.ox1, h = S * 1.28, y = F - h + S * 0.06, er = S * 0.3;
+    log(g, o) {
+      const x0 = o.ox0, x1 = o.ox1, { h, y, er } = logBox(), ry = h / 2;
       g.lineJoin = 'round'; g.lineWidth = lw();
-      // far opening, then the body, then the near opening on top
-      g.fillStyle = '#2A1F1A'; g.beginPath(); g.ellipse(x1, y + h / 2, er, h / 2, 0, 0, TAU); g.fill();
       const gr = g.createLinearGradient(0, y, 0, y + h); gr.addColorStop(0, '#B98556'); gr.addColorStop(0.5, '#9A6A40'); gr.addColorStop(1, '#774C2C');
-      g.fillStyle = gr; g.strokeStyle = '#4E3020';
-      g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.ellipse(x1, y + h / 2, er, h / 2, 0, -Math.PI / 2, Math.PI / 2); g.lineTo(x0, y + h); g.ellipse(x0, y + h / 2, er, h / 2, 0, Math.PI / 2, -Math.PI / 2, true); g.closePath(); g.fill(); g.stroke();
+      if (o.anim > 0 && o.anim < 1) {                       // somebody small is travelling along inside
+        const bx = lerp(x0 + S * 0.3, x1 - S * 0.2, o.anim);
+        g.fillStyle = '#B98556'; g.strokeStyle = '#4E3020'; g.beginPath(); g.ellipse(bx, y + 2, S * 0.42, S * 0.16, 0, Math.PI, 0); g.fill(); g.stroke();
+      }
+      g.fillStyle = gr; g.strokeStyle = '#4E3020'; const body = logBody(o); g.fill(body); g.stroke(body);
       g.strokeStyle = 'rgba(78,48,32,0.5)'; g.lineWidth = 2.5; g.lineCap = 'round';
-      for (const [u, v, l] of [[0.25, 0.25, 0.5], [0.5, 0.5, 0.7], [0.3, 0.76, 0.4], [0.72, 0.3, 0.3]]) { g.beginPath(); g.moveTo(x0 + (x1 - x0) * u, y + h * v); g.lineTo(x0 + (x1 - x0) * u + S * l, y + h * v); g.stroke(); }
-      g.fillStyle = '#E2B27A'; g.strokeStyle = '#4E3020'; g.lineWidth = lw(); g.beginPath(); g.ellipse(x0, y + h / 2, er, h / 2, 0, 0, TAU); g.fill(); g.stroke();
-      g.fillStyle = '#2A1F1A'; g.beginPath(); g.ellipse(x0, y + h / 2, er * 0.72, h * 0.39, 0, 0, TAU); g.fill();
+      for (const [u, v, l] of [[0.3, 0.25, 0.5], [0.52, 0.5, 0.7], [0.34, 0.76, 0.4], [0.74, 0.3, 0.3]]) { g.beginPath(); g.moveTo(x0 + (x1 - x0) * u, y + h * v); g.lineTo(x0 + (x1 - x0) * u + S * l, y + h * v); g.stroke(); }
+      // the near end: a ring of pale wood around the way in
+      g.fillStyle = '#E2B27A'; g.strokeStyle = '#4E3020'; g.lineWidth = lw(); g.beginPath(); g.ellipse(x0, y + ry, er, ry, 0, 0, TAU); g.fill(); g.stroke();
+      g.strokeStyle = 'rgba(78,48,32,0.35)'; g.lineWidth = 2; g.beginPath(); g.ellipse(x0, y + ry, er * 0.87, ry * 0.89, 0, 0, TAU); g.stroke();
+      g.fillStyle = '#2A1F1A'; g.fill(logHole(o));
       // moss and a mushroom on top
       g.fillStyle = '#6CC58E'; g.beginPath(); g.ellipse(x0 + (x1 - x0) * 0.55, y + 2, S * 0.6, S * 0.12, 0, Math.PI, 0); g.fill();
       const mx = x0 + (x1 - x0) * 0.8; g.fillStyle = '#FFF3DC'; g.fillRect(mx - S * 0.04, y - S * 0.18, S * 0.08, S * 0.2); g.fillStyle = '#FF5A4E'; g.beginPath(); g.ellipse(mx, y - S * 0.18, S * 0.16, S * 0.12, 0, Math.PI, 0); g.fill();
     },
   };
+  // the log lies on its side with its open end towards us: anything going in is seen through that opening, then hidden by the wood
+  const logBox = () => ({ h: S * 1.28, y: F - S * 1.22, er: S * 0.44 });
+  function logBody(o) { const { h, y, er } = logBox(), p = new Path2D(); p.moveTo(o.ox0, y); p.lineTo(o.ox1, y); p.ellipse(o.ox1, y + h / 2, er * 0.7, h / 2, 0, -Math.PI / 2, Math.PI / 2); p.lineTo(o.ox0, y + h); p.ellipse(o.ox0, y + h / 2, er, h / 2, 0, Math.PI / 2, -Math.PI / 2, false); p.closePath(); return p; }
+  function logHole(o) { const { h, y, er } = logBox(), p = new Path2D(); p.ellipse(o.ox0, y + h / 2, er * 0.74, h * 0.4, 0, 0, TAU); return p; }
+  function drawHero(g) {
+    const lg = obs.find((o) => o.t === 'log' && c.x > o.ox0 - S * 3 && c.x < o.ox1 + S * 3);
+    if (!lg) { c.draw(g); return; }
+    const out = new Path2D(); out.rect(-1e5, -1e5, 2e5 + L, 2e5); out.addPath(logBody(lg));
+    g.save(); g.clip(out, 'evenodd'); c.draw(g); g.restore();
+    g.save(); g.clip(logHole(lg)); c.draw(g); g.restore();
+  }
   // a cave around anything that says so: rock behind, darkness in front (with a hole of light around a glowing doodling)
   function cavePath(o) { const p = new Path2D(), h = S * 2.9, x0 = o.x0, x1 = o.x1; p.moveTo(x0, F + 2); p.lineTo(x0, F - h * 0.55); p.bezierCurveTo(x0, F - h * 1.12, x1, F - h * 1.12, x1, F - h * 0.55); p.lineTo(x1, F + 2); p.closePath(); return p; }
   function caveBack(g, o) {
@@ -5080,7 +5461,7 @@ const Quest = (() => {
     g.fillStyle = '#FFFDF8'; g.strokeStyle = INK; g.lineWidth = lw() * 0.8; g.beginPath(); g.ellipse(0, 0, S * 0.58, S * 0.15, 0, 0, TAU); g.fill(); g.stroke();
     g.strokeStyle = 'rgba(43,45,66,0.22)'; g.lineWidth = 2; g.beginPath(); g.ellipse(0, -S * 0.01, S * 0.38, S * 0.085, 0, 0, TAU); g.stroke();
     g.restore();
-    if (p.k && !p.eaten) snackAt(g, p.k, x, y - S * 0.46 - p.pop * S * 0.2, S * 0.4 * k, 0);
+    if (p.k && !p.eaten) itemAt(g, p.k, x, y - S * 0.46 - p.pop * S * 0.2, S * 0.4 * k, 0);
     else if (!p.pending && mode === 'plan') {              // an empty place, waiting
       g.save(); g.setLineDash([S * 0.14, S * 0.14]); g.lineDashOffset = -time * 14; g.lineWidth = Math.max(2.5, S * 0.06); g.lineCap = 'round';
       g.strokeStyle = on ? '#D99A00' : 'rgba(43,45,66,0.4)'; g.fillStyle = on ? 'rgba(255,201,40,0.3)' : 'rgba(255,255,255,0.35)';
@@ -5116,7 +5497,8 @@ const Quest = (() => {
     if (place === 'stage') g.drawImage(backdrop[2], 0, 0, W, H);
     g.save();
     g.translate(-cam + (shake > 0.2 ? rand(-shake, shake) : 0), shake > 0.2 ? rand(-shake, shake) : 0);
-    for (const o of obs) { if (o.rain) rainBack(g, o); if (o.dark) caveBack(g, o); if (o.t !== 'cave' && o.t !== 'cloud') ART[o.t](g, o, false); }
+    for (const o of obs) { if (o.rain) rainBack(g, o); if (o.dark) caveBack(g, o); if (o.t !== 'cave' && o.t !== 'cloud') ART[o.t](g, o); }
+    if (hopL) drawPond(g);
     // a flag where the trail starts
     g.strokeStyle = INK; g.lineWidth = lw(); g.lineCap = 'round'; g.beginPath(); g.moveTo(S * 0.7, F + S * 0.1); g.lineTo(S * 0.7, F - S * 2); g.stroke();
     g.fillStyle = '#FFC928'; g.lineJoin = 'round'; g.beginPath(); g.moveTo(S * 0.7, F - S * 2); g.quadraticCurveTo(S * 1.2, F - S * 2.1 + Math.sin(time * 3) * 4, S * 1.6, F - S * 1.7); g.quadraticCurveTo(S * 1.2, F - S * 1.6, S * 0.7, F - S * 1.4); g.closePath(); g.fill(); g.stroke();
@@ -5125,16 +5507,25 @@ const Quest = (() => {
     const overGap = obs.some((o) => o.t === 'gap' && c.x > o.ox0 && c.x < o.ox1);
     if (!overGap) c.drawShadow(g, F);
     fxp.draw(g, true);
-    c.draw(g);
-    for (const o of obs) { if (o.t === 'log') ART.log(g, o, true); if (o.dark) caveFront(g, o); }
+    drawHero(g);
+    if (hopL && hopL.sink) drawPond(g);                    // gone under: the water closes over
+    if (hopL && mode !== 'plan') drawHops(g);
+    for (const o of obs) if (o.dark) caveFront(g, o);
     fxp.draw(g, false);
     for (const f of fly) {
-      if (f.eat) { const u = clamp01(f.t / 0.2), m = c.mouthPos(); snackAt(g, f.k, lerp(f.x0, m[0], u), lerp(f.y0, m[1], u) - Math.sin(u * Math.PI) * S * 0.3, S * 0.4 * (1 - u * 0.6), u * 2); }
-      else { const u = ease.inOut(clamp01(f.t / 0.36)); snackAt(g, f.k, lerp(f.x0, f.p.x, u), lerp(f.y0, F - S * 0.36, u) - Math.sin(u * Math.PI) * S * 1.6, S * 0.4, (1 - u) * 3); }
+      if (f.eat) { const u = clamp01(f.t / 0.2), m = c.mouthPos(); itemAt(g, f.k, lerp(f.x0, m[0], u), lerp(f.y0, m[1], u) - Math.sin(u * Math.PI) * S * 0.3, S * 0.4 * (1 - u * 0.6), u * 2); }
+      else { const u = ease.inOut(clamp01(f.t / 0.36)); itemAt(g, f.k, lerp(f.x0, f.p.x, u), lerp(f.y0, F - S * 0.36, u) - Math.sin(u * Math.PI) * S * 1.6, S * 0.4, (1 - u) * 3); }
     }
-    if (hint) drawHint(g);
+    if (hint && !hint.hop) drawHint(g);
     g.restore();
     amb.front(g);
+    if (hopL && mode === 'plan' && hopL.sx(hopL.to) - cam > W - S * 0.4) {
+      const x = W - 34, y = F + S * 0.56, r = 22 * (1 + 0.06 * Math.sin(time * 4));
+      g.fillStyle = '#FFC928'; g.strokeStyle = INK; g.lineWidth = 3; g.lineJoin = 'round';
+      g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(x + r + 3, y - 8); g.lineTo(x + r + 12, y); g.lineTo(x + r + 3, y + 8); g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = INK; g.font = `900 24px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(hopL.to), x, y + 1);
+    }
     if (flash > 0.01) { g.fillStyle = `rgba(255,252,235,${flash * flash})`; g.fillRect(0, 0, W, H); }
   }
 
@@ -5166,7 +5557,7 @@ const Quest = (() => {
 
   // read-only peek for the automated play-through and the guide recorder
   window.__quest = () => ({
-    mode, lv, cam, S, F, L, active, done: done.slice(), running: !!script, won, oops, hint: !!hint,
+    mode, lv, world, cam, S, F, L, active, done: done.slice(), hop: hopL && { to: hopL.to, end: hopL.end, jellies: hopL.jellies, pos: hopL.pos, fails: hopL.fails, lit: hopL.lit, hintN: hopL.hintN, x: hopL.sx(hopL.to) - cam }, running: !!script, won, oops, hint: !!hint,
     c: c ? { x: c.x - cam, y: c.y, fx: Object.keys(c.fx) } : null,
     plates: plates.map((p) => ({ x: p.x - cam, y: F - S * 0.4, k: p.k })),
     obs: obs.map((o) => ({ t: o.t, needs: o.needs.map((n) => SNACK_OF[n]), done: o.done, x: (o.x0 + o.x1) / 2 - cam, w: o.x1 - o.x0, fails: o.fails, anim: o.anim, z: o.zanim })),
@@ -5198,6 +5589,7 @@ function makeDemo(seed, wear) {
   if (r() < 0.6) { put('foot', 155, 1); put('foot', -155, 1); }
   if (r() < 0.4) put('tail', 118, 1);
   for (const [k, deg, dist, col] of wear || []) { const n = d.parts.length; put(k, deg, dist); if (col && d.parts.length > n) d.parts[n].c = col; }
+  d.voice = VOICE_LIST[Math.floor(r() * VOICE_LIST.length)];
   c.refreshParts();
   return c;
 }
@@ -5277,7 +5669,7 @@ const Home = (() => {
     if (long) return;
     const c = m.c;
     c.poke(c.x, c.y - S * 0.5);
-    if (!m.saved) { Sound.setVoice({ size: 0.5, seed: c.d.seed }); Sound.voice('boop', { pitch: rand(-2, 4) }); c.say(0.15); c.setMood('happy', 0.8); c.hop(0, 0.7); wiggle(addBtn); return; }
+    if (!m.saved) { Sound.setVoice({ size: 0.5, seed: c.d.seed, style: c.d.voice }); Sound.voice('boop', { pitch: rand(-2, 4) }); c.say(0.15); c.setMood('happy', 0.8); c.hop(0, 0.7); wiggle(addBtn); return; }
     Sound.sfx('page');
     if (c.d.awake) App.go('world', { critter: c, from: 'home' }); else App.go('studio', { critter: c });
   }
@@ -5576,6 +5968,9 @@ window.__doodArt = {
     drawPartThumb(g, k, 60, body || PALETTE[0]);
     return cv.toDataURL('image/png');
   },
+  // the pictures on the voice and band buttons
+  voice(k, px) { const cv = document.createElement('canvas'); cv.width = cv.height = px; drawVoiceThumb(cv.getContext('2d'), k, px); return cv.toDataURL('image/png'); },
+  tune(k, px) { const cv = document.createElement('canvas'); cv.width = cv.height = px; drawTuneThumb(cv.getContext('2d'), k, px); return cv.toDataURL('image/png'); },
   wordmark(h, color) {
     const cv = document.createElement('canvas'); cv.width = Math.round(h * 6); cv.height = Math.round(h * 2.15);
     drawWordmark(cv.getContext('2d'), cv.width / 2, h * 0.86, h, { x: 0.25, y: 0.2 }, false, color || INK);
@@ -5601,7 +5996,7 @@ window.__doodArt = {
 };
 
 // the drawing internals, for contact sheets (tools/look.mjs)
-window.__doodKit = { App, Places, PARTS, PART_TRAYS, PLACE_LIST, QUESTS, drawPartThumb, makeDemo, Critter, worldTheme, PALETTE };
+window.__doodKit = { App, Places, PARTS, PART_TRAYS, PLACE_LIST, QUESTS, PONDS, VOICE_LIST, TUNE_LIST, drawPartThumb, makeDemo, Critter, worldTheme, PALETTE };
 
 })();
 </script>
