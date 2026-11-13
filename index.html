@@ -244,6 +244,9 @@ input.tag.pulse { animation: pulse 1.5s ease-in-out infinite; box-shadow: 0 0 0 
   background: rgba(255,253,248,.92); box-shadow: 0 14px 34px rgba(43,45,66,.18); pointer-events: auto; animation: rise .3s cubic-bezier(.2,1.3,.4,1); }
 .cupbar[data-phase="line"], .cupbar[data-phase="podium"] { display: flex; }
 .cupbar .packs { display: flex; gap: 8px; }
+.cupbar .box { width: 54px; height: 54px; flex: none; display: grid; place-items: center; }
+.cupbar[data-phase="podium"] .box { display: none; }
+.thumb.pack.used:not(.on) { opacity: .4; }
 .cupbar[data-phase="podium"] .packs, .cupbar[data-phase="podium"] .go, .cupbar[data-phase="line"] > .btn:not(.go) { display: none; }
 .cupbar .btn.go { --btn: 68px; }
 .thumb.pack { touch-action: manipulation; }
@@ -524,7 +527,7 @@ const Sound = (() => {
       if (kind === 'brr') for(let j=1;j<7;j++) tone(t+j*.07,.055,hz(base+rand(-1,1)),hz(base),.075,'sine',1400,opts);
     });
   }
-  const sfxNames = 'tap pick drop swipe undo delete error camera page clay brush stick dice squish boing thud whoosh hop sparkle magic poof fire freeze crack shatter inflate deflate grow shrink rainbow star night recStart recStop learn confetti'.split(' ');
+  const sfxNames = 'tap pick drop swipe undo delete error camera page clay brush stick dice squish boing thud whoosh hop sparkle magic poof fire freeze crack shatter inflate deflate grow shrink rainbow star night recStart recStop learn confetti horn ping'.split(' ');
   function sfx(name, opts = {}) {
     if (!ready() || !sfxNames.includes(name) || active > 64 || (name === 'brush' && active > 24)) return;
     const t=ctx.currentTime+.003, p=Math.pow(2,(clamp(opts.pitch,-36,36,0)+rand(-.4,.4))/12);
@@ -566,6 +569,8 @@ const Sound = (() => {
       case 'recStart': notes([0,7],.13,.19,.2); break;
       case 'recStop': notes([7,0],.13,.19,.2); break;
       case 'learn': notes([0,4,7,12],.10,.26,.24); break;
+      case 'horn': pluck(0,147,146,.95,.2,'sawtooth',1100); pluck(0,185,184,.95,.15,'sawtooth',1100); pluck(0,220,219,.95,.1,'square',900); break;
+      case 'ping': pluck(0,2350,2330,.5,.13,'sine',7000); pluck(0,3520,3500,.3,.06,'sine',8000); puff(0,.03,.16,4200); break;
       case 'confetti': puff(0,.15,.35,1600); notes([12,7,19,16],.075,.2,.19); break;
     }
   }
@@ -932,6 +937,7 @@ const ICONS = {
   tent: _svg('<path d="M3 19.500h18L12 6.500z"/><path d="M12 6.500V3M12 3.200l3.600 1.200L12 5.600" fill="currentColor"/><path d="M9.500 19.500 12 12.500l2.500 7"/>'),
   glove: _svg('<path d="M7.500 20v-3.800c-2-1.300-2.800-3.200-2.800-5.700V7.300a1.400 1.400 0 0 1 2.800 0V5.600a1.400 1.400 0 0 1 2.800 0V5a1.400 1.400 0 0 1 2.800 0v.9a1.400 1.400 0 0 1 2.800 0v5l1.300-1.600a1.500 1.500 0 0 1 2.400 1.800l-3 4.900V20z"/><path d="M7.500 16.800h9"/>'),
   ball: _svg('<circle cx="12" cy="12" r="8.500"/><path d="M12 8.600l3.200 2.300-1.200 3.800h-4l-1.200-3.800z" fill="currentColor"/><path d="M12 8.600V3.800M15.200 10.900l4.500-1.500M14 14.700l2.700 3.800M10 14.700l-2.700 3.800M8.800 10.900 4.300 9.400"/>'),
+  puck: _svg('<path d="M17.500 3.500 12.200 15.800H6.300" stroke-width="2.600"/><ellipse cx="17" cy="18.600" rx="3.400" ry="1.700" fill="currentColor"/>'),
   again: _svg('<path d="M19.300 12.500a7.300 7.300 0 1 1-2.200-5.700"/><path d="M19.600 3.500v4.300h-4.300"/>', 'stroke-width="2.800"'),
   rewind: _svg('<path d="M11.500 6.500v11L4 12zM20 6.500v11L12.500 12z" fill="currentColor"/>', 'stroke-width="2"'),
   suitcase: _svg('<rect x="3.500" y="8" width="17" height="11.500" rx="2.800"/><path d="M9 8V5.300h6V8M3.500 13.200h17M12 12v2.400"/>'),
@@ -3651,7 +3657,7 @@ class Critter {
 
   drawPart(g, i, t) {
     const np = this.d.parts.length, p = i < np ? this.d.parts[i] : this.gp[i - np], def = p && PARTS[p.k];
-    if (!def) return;
+    if (!def || p.k === this.hideK) return;              // hideK: a game lends its own version of this part for a while (the hockey stick)
     const body = this.bodyColor();
     const col = this.colors(p.c || partTint(def, body));
     const near = p._near || 0, w = p._w || 0;
@@ -7631,64 +7637,111 @@ const Quest = (() => {
 // Everything is measured in goal units: the middle of the goal line is (0, 0), one unit is geo.U pixels, up is positive.
 const SHOOT = {
   catch: 0.24, ball: 0.07,                                  // the keeper's catch ring and the ball, for every keeper and every ball
-  soccer: { wide: 1, high: 0.84, rest: 0.3 },               // the posts are at -wide and +wide, the bar is at high; rest = where a keeper stands
-  hockey: { wide: 0.8, high: 0.42, rest: 0.22, quick: 0.7 },  // quick: a keeper in pads on ice is a little slower across
+  // the posts are at -wide and +wide, the bar is at high; rest = where a keeper stands; fly = how long a soft and a hard shot take to arrive
+  soccer: { wide: 1, high: 0.84, rest: 0.3, fly: [1.0, 0.55] },
+  // hockey is its own game: a small net, a keeper in pads, a puck that lifts, and a slapshot.
+  //   pads: [how far they reach each side when the keeper is down, how far when it stands tall, how high they stop a puck]
+  //   quick: a keeper in pads is a little slower across.  slap: a full wind-up arrives in this share of the time.  lift: and rises this much more
+  hockey: { wide: 0.72, high: 0.74, rest: 0.3, fly: [0.78, 0.46], quick: 0.68, pads: [0.36, 0.2, 0.2], slap: 0.6, lift: 0.08 },
   // level 1, 2, 3 when the child shoots: how long the keeper takes to react, how fast it moves, how far it wanders while it waits
-  // (tried with thousands of made-up flicks: any old flick scores about 6 in 10 at level 1, 2 in 10 at level 2, 1 in 20 at level 3;
-  //  a hard one aimed away from the keeper nearly always scores at levels 1 and 2, and about 6 in 10 at level 3)
+  // (tried with thousands of made-up flicks, see tools/tune-shoot.mjs and WORK-LIST.md job F1)
   keeper: [{ wait: 0.55, speed: 0.75, sway: 0.4 }, { wait: 0.32, speed: 1.3, sway: 0.3 }, { wait: 0.22, speed: 1.7, sway: 0.25 }],
   // level 1, 2, 3 when the child keeps goal: how long each shot takes to arrive
   shot: [1.5, 1.15, 0.9],
   balls: 5,
 };
 
+// ----- the rules, as plain sums: no drawing, no clock, no doodling. tools/tune-shoot.mjs plays thousands of shots through these. -----
+const ShootRules = {
+  top: (R) => R.high - 0.14,                                // as high as any keeper can reach
+  // the pads of a hockey keeper: wide when it is down on the ice, narrower when it stretches up
+  pads(R, kv) { if (!R.pads) return null; const up = clamp01((kv - R.rest) / (ShootRules.top(R) - R.rest)); return { w: lerp(R.pads[0], R.pads[1], up), h: R.pads[2] }; },
+  // did the keeper at (ku, kv) stop a ball arriving at (bu, bv)? 'ring', 'pads' or ''
+  stops(R, ku, kv, bu, bv) {
+    if (hypot(bu - ku, bv - kv) < SHOOT.catch + SHOOT.ball) return 'ring';
+    const P = ShootRules.pads(R, kv);
+    return P && Math.abs(bu - ku) < P.w + SHOOT.ball * 0.5 && bv < P.h ? 'pads' : '';
+  },
+  // one moment of a keeper going for a ball
+  chase(R, lv, kp, bu, bv, dt) {
+    const tu = clamp(bu, -R.wide + 0.1, R.wide - 0.1), tv = clamp(bv, R.rest, ShootRules.top(R));
+    const du = tu - kp.u, dv = tv - kp.v, dd = hypot(du, dv), go = Math.min(dd, lv.speed * (R.quick || 1) * dt);
+    if (dd > 1e-4) { kp.u += (du / dd) * go; kp.v += (dv / dd) * go; }
+  },
+  // how hard the flick was (0 to 1) and how far the stick was drawn back (0 to 1) become a height and a flight time
+  power(R, p, wind = 0) {
+    let v = lerp(SHOOT.ball, R.high * 1.12, p), T = lerp(R.fly[0], R.fly[1], Math.min(1, p * 1.6));
+    if (R.slap && wind > 0) { T *= lerp(1, R.slap, wind); v += wind * R.lift; }
+    return { v, T };
+  },
+  result(R, ku, kv, bu, bv) {
+    const how = ShootRules.stops(R, ku, kv, bu, bv), B = SHOOT.ball;
+    if (how) return how;
+    if (Math.abs(bu) < R.wide - B && bv < R.high - B) return 'goal';
+    return Math.abs(bu) < R.wide + B * 1.3 && bv < R.high + B * 1.3 ? 'post' : 'wide';
+  },
+};
+
 const Shoot = (() => {
   let root, swapBtn, levelBtn, againBtn;
   let c = null, d = null, pal = null, fxp = null, sport = 'soccer', role = 'shoot', level = 1;
   let phase = 'ready', shotN = 0, marks = [], time = 0, bg = null, ptr = null, idle = 0, waitT = 0, flash = 0, shake = 0, newBest = false, best = 0, lastSide = 0;
+  let lamp = 9, plan = { slap: false, at: 1.1 };             // the goal light, and the friend's next shot
   const geo = { U: 100, gy: 0, bx: 0, by: 0, wide: 1, high: 0.84, rest: 0.3 };
-  const ball = { on: false, t: 0, T: 1, u: 0, v: 0, x: 0, y: 0, r: 0, out: null, vx: 0, vy: 0, rot: 0, after: 0 };
+  const ball = { on: false, t: 0, T: 1, u: 0, v: 0, x: 0, y: 0, r: 0, out: null, how: '', wind: 0, vx: 0, vy: 0, rot: 0, after: 0 };
   const kp = { u: 0, v: 0.3, vu: 0, tu: 0, tv: 0.3, ph: 0 };           // the keeper, in goal units
   const net = { t: 9, u: 0, v: 0 };
+  const stick = { a: 0, t: -1, from: 0, to: 0 };            // the skater's stick: how far it is swung back, and the swing of a shot
+  const hands = [{ x: 0, y: 0 }, { x: 0, y: 0 }];           // a hockey keeper's blocker and catching glove, as steps away from where they rest
   const env = { g: 2400, floor: 0, left: -1e5, right: 1e5, top: -1e5 };
   const key = () => `${sport}.${role}.${level}`;
   const keeperOf = () => (role === 'shoot' ? pal : c), kickerOf = () => (role === 'shoot' ? c : pal);
   const X = (u) => geo.bx + u * geo.U, Y = (v) => geo.gy - v * geo.U;
+  const ice = () => sport === 'hockey', RU = () => SHOOT[sport], near = () => (ice() ? 0.15 : 0.2);   // near: how big the ball looks at the child's end
 
-  // ----- DOM: three buttons, shown only between rounds -----
+  // ----- DOM: three buttons. Swap and the stars are always there; a tap on either starts a fresh round. -----
   function build(parent) {
     root = el('div', 'shootbar', parent);
-    swapBtn = iconBtn('glove', '', root, 'Swap places', () => { if (phase !== 'ready' && phase !== 'done') return; Sound.sfx('swipe'); role = role === 'shoot' ? 'keep' : 'shoot'; reset(); });
+    swapBtn = iconBtn('glove', '', root, 'Swap places', () => { Sound.sfx('swipe'); role = role === 'shoot' ? 'keep' : 'shoot'; reset(); });
     againBtn = iconBtn('again', 'primary', root, 'Again', () => { Sound.sfx('page'); reset(); });
-    levelBtn = iconBtn('lv1', '', root, 'Harder or easier', () => { if (phase !== 'ready' && phase !== 'done') return; Sound.sfx('tap', { pitch: level * 3 }); level = (level % 3) + 1; reset(); });
+    levelBtn = iconBtn('lv1', '', root, 'Harder or easier', () => { Sound.sfx('tap', { pitch: level * 3 }); level = (level % 3) + 1; reset(); });
   }
   function syncBar() {
-    const between = phase === 'ready' || phase === 'done';
-    root.classList.toggle('on', between); root.classList.toggle('done', phase === 'done');
-    setIcon(swapBtn, role === 'shoot' ? 'glove' : 'ball'); setIcon(levelBtn, 'lv' + level);
+    root.classList.add('on'); root.classList.toggle('done', phase === 'done');
+    setIcon(swapBtn, role === 'shoot' ? 'glove' : ice() ? 'puck' : 'ball'); setIcon(levelBtn, 'lv' + level);
     againBtn.classList.toggle('glow', phase === 'done');
   }
 
-  // ----- the pitch, painted once -----
+  // ----- the pitch or the rink, painted once -----
   function layout() {
-    const W = App.W, H = App.H, R = SHOOT[sport];
+    const W = App.W, H = App.H, R = RU();
     geo.wide = R.wide; geo.high = R.high; geo.rest = R.rest;
     const low = H < 520;                                    // a phone on its side: the goal fills what height there is
     geo.U = Math.min((W * 0.88) / 2, (H * (low ? 0.4 : 0.3)) / 0.84, 260);
-    geo.bx = W / 2; geo.gy = low ? 72 + 0.84 * geo.U : Math.max(136 + 0.84 * geo.U, H * 0.43); geo.by = H - (low ? 66 : Math.max(96, H * 0.16));
+    geo.bx = W / 2; geo.gy = low ? 72 + 0.84 * geo.U : Math.max(136 + 0.84 * geo.U, H * 0.43);
+    // the puck sits a little further up the ice than the ball does on the grass: there has to be room to draw the stick back
+    geo.by = ice() ? H - (low ? 84 : Math.max(150, H * 0.22)) : H - (low ? 66 : Math.max(96, H * 0.16));
     env.floor = geo.by + geo.U * 0.2;
     const dpr = App.dpr, cv = (bg = document.createElement('canvas'));
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const U = geo.U, gy = geo.gy, hz = gy - U * 0.2, ice = sport === 'hockey';
+    const U = geo.U, gy = geo.gy, hz = gy - U * 0.2, rink = ice();
     // the far side: sky, a hill or the boards, a string of flags
-    let gr = g.createLinearGradient(0, 0, 0, hz); gr.addColorStop(0, ice ? '#7FB8EE' : '#7CCBF5'); gr.addColorStop(1, ice ? '#DCEBFA' : '#DDF3FB');
+    let gr = g.createLinearGradient(0, 0, 0, hz); gr.addColorStop(0, rink ? '#7FB8EE' : '#7CCBF5'); gr.addColorStop(1, rink ? '#DCEBFA' : '#DDF3FB');
     g.fillStyle = gr; g.fillRect(0, 0, W, hz + 2);
-    if (ice) {
-      for (const [col, y0, h] of [['#F4F8FF', hz - U * 0.5, U * 0.5], ['#FFC928', hz - U * 0.07, U * 0.07]]) { g.fillStyle = col; g.fillRect(0, y0, W, h); }
-      g.strokeStyle = 'rgba(43,45,66,0.25)'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, hz - U * 0.5); g.lineTo(W, hz - U * 0.5); g.stroke();
-      const r = rng(5);                                     // a crowd behind the glass: just dots of colour
-      for (let i = 0; i < W / 9; i++) { g.fillStyle = rgba(PALETTE[(r() * 9) | 0], 0.75); g.beginPath(); g.arc(r() * W, hz - U * (0.56 + r() * 0.34), 5 + r() * 5, 0, TAU); g.fill(); }
+    if (rink) {
+      const top = hz - U * 0.5, r = rng(5);
+      for (let i = 0; i < W / 9; i++) { g.fillStyle = rgba(PALETTE[(r() * 9) | 0], 0.75); g.beginPath(); g.arc(r() * W, top - U * (0.06 + r() * 0.34), 5 + r() * 5, 0, TAU); g.fill(); }   // a crowd: just dots of colour
+      // the glass they sit behind: a pale sheet, a post between each pane, a glint or two
+      g.fillStyle = 'rgba(255,255,255,0.2)'; g.fillRect(0, top - U * 0.5, W, U * 0.5);
+      g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, top - U * 0.5); g.lineTo(W, top - U * 0.5); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = 3;
+      for (let x = geo.bx - U * 0.55 - Math.ceil(geo.bx / (U * 1.1)) * U * 1.1; x < W; x += U * 1.1) { g.beginPath(); g.moveTo(x, top - U * 0.5); g.lineTo(x, top); g.stroke(); }
+      g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = U * 0.05; g.lineCap = 'round';
+      for (let i = 0; i < W / (U * 1.1) + 1; i++) { const x = r() * W; g.beginPath(); g.moveTo(x, top - U * 0.12); g.lineTo(x + U * 0.16, top - U * 0.4); g.stroke(); }
+      // the boards, with their yellow kick plate
+      for (const [col, y0, h] of [['#F4F8FF', top, U * 0.5], ['#FFC928', hz - U * 0.07, U * 0.07]]) { g.fillStyle = col; g.fillRect(0, y0, W, h); }
+      g.strokeStyle = 'rgba(43,45,66,0.25)'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, top); g.lineTo(W, top); g.stroke();
     } else {
       const hill = (base, amp, col, f, ph) => { g.fillStyle = col; g.beginPath(); g.moveTo(0, hz + 2); for (let x = 0; x <= W + 8; x += 8) g.lineTo(x, base - amp * (0.6 * Math.sin((x / W) * f + ph) + 0.4 * Math.sin((x / W) * f * 2.3 + ph * 2))); g.lineTo(W, hz + 2); g.fill(); };
       hill(hz - U * 0.42, U * 0.16, '#A8DDB0', 5, 1); hill(hz - U * 0.2, U * 0.12, '#8ED095', 7, 3.1);
@@ -7696,91 +7749,114 @@ const Shoot = (() => {
     }
     if (!low) drawBunting(g, -10, W + 10, 62, 16, clamp(W / 26, 13, 24));
     // the ground, running toward the goal
-    gr = g.createLinearGradient(0, hz, 0, H); gr.addColorStop(0, ice ? '#E9F6FF' : '#8EDB7A'); gr.addColorStop(1, ice ? '#BFE3F7' : '#57BB5E');
+    gr = g.createLinearGradient(0, hz, 0, H); gr.addColorStop(0, rink ? '#E9F6FF' : '#8EDB7A'); gr.addColorStop(1, rink ? '#BFE3F7' : '#57BB5E');
     g.fillStyle = gr; g.fillRect(0, hz, W, H - hz);
-    if (!ice) {                                             // mown stripes
+    g.lineCap = 'round';
+    if (!rink) {                                            // mown stripes
       g.fillStyle = 'rgba(255,255,255,0.1)';
       for (let i = 0; i < 6; i += 2) { const y0 = lerp(hz, H, (i / 6) ** 1.6), y1 = lerp(hz, H, ((i + 1) / 6) ** 1.6); g.fillRect(0, y0, W, y1 - y0); }
     } else {
+      // a blue line across, a face-off circle either side, and the marks skates leave
+      const ly = lerp(gy, geo.by, 0.66);
+      g.strokeStyle = 'rgba(63,107,240,0.55)'; g.lineWidth = U * 0.1; g.lineCap = 'butt'; g.beginPath(); g.moveTo(0, ly); g.lineTo(W, ly); g.stroke(); g.lineCap = 'round';
+      for (const s of [-1, 1]) {
+        const fx = geo.bx + s * Math.max(U * 1.3, W * 0.36), fy = lerp(gy, geo.by, 0.3);
+        g.strokeStyle = 'rgba(255,90,78,0.55)'; g.lineWidth = Math.max(2.5, U * 0.025); g.beginPath(); g.ellipse(fx, fy, U * 0.5, U * 0.16, 0, 0, TAU); g.stroke();
+        g.fillStyle = 'rgba(255,90,78,0.6)'; g.beginPath(); g.ellipse(fx, fy, U * 0.09, U * 0.03, 0, 0, TAU); g.fill();
+      }
       g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 2; const r = rng(9);
       for (let i = 0; i < 14; i++) { const x = r() * W, y = lerp(gy + 10, H, r()), l = U * (0.2 + r() * 0.4); g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + l * 0.5, y - 6, x + l, y + 2); g.stroke(); }
     }
     // the lines: the goal line, and the box (or the crease)
-    g.lineCap = 'round'; g.strokeStyle = ice ? '#FF5A4E' : 'rgba(255,255,255,0.9)'; g.lineWidth = Math.max(3, U * 0.035);
+    g.strokeStyle = rink ? '#FF5A4E' : 'rgba(255,255,255,0.9)'; g.lineWidth = Math.max(3, U * 0.035);
     g.beginPath(); g.moveTo(0, gy); g.lineTo(W, gy); g.stroke();
-    if (ice) { g.fillStyle = 'rgba(53,182,242,0.3)'; g.strokeStyle = '#FF5A4E'; g.beginPath(); g.ellipse(geo.bx, gy, U * 1.15, U * 0.42, 0, 0, Math.PI); g.fill(); g.stroke(); }
+    if (rink) { g.fillStyle = 'rgba(53,182,242,0.3)'; g.strokeStyle = '#FF5A4E'; g.beginPath(); g.ellipse(geo.bx, gy, U * 1.05, U * 0.4, 0, 0, Math.PI); g.fill(); g.stroke(); }
     else { g.beginPath(); g.moveTo(geo.bx - U * 1.5, gy); g.lineTo(geo.bx - U * 2.0, gy + U * 0.75); g.lineTo(geo.bx + U * 2.0, gy + U * 0.75); g.lineTo(geo.bx + U * 1.5, gy); g.stroke(); g.fillStyle = 'rgba(255,255,255,0.9)'; g.beginPath(); g.ellipse(geo.bx, geo.by + U * 0.2, U * 0.12, U * 0.04, 0, 0, TAU); g.fill(); }
   }
 
   // ----- a round -----
   function reset() {
-    phase = 'ready'; shotN = 0; marks = []; ball.on = false; ball.out = null; ptr = null; idle = 0; waitT = 0; newBest = false;
+    phase = 'ready'; shotN = 0; marks = []; ball.on = false; ball.out = null; ptr = null; idle = 0; waitT = 0; newBest = false; lamp = 9;
     best = (d.best && d.best[key()]) || 0;
-    kp.u = kp.tu = 0; kp.v = kp.tv = geo.rest; kp.vu = 0; kp.ph = rand(TAU);
-    layout(); place(); syncBar(); GrowHud.hide();
+    kp.u = kp.tu = 0; kp.v = kp.tv = geo.rest = RU().rest; kp.vu = 0; kp.ph = rand(TAU);
+    stick.a = 0; stick.t = -1; for (const h of hands) h.x = h.y = 0;
+    layout(); place(); planShot(); syncBar(); GrowHud.hide();
     Sound.setVoice({ size: 0.5, seed: d.seed, style: d.voice });
   }
   // stand everybody where they belong. Every keeper is drawn the size of the catch ring, whatever it looked like when it was drawn.
   function place() {
     const K = keeperOf(), O = kickerOf(), U = geo.U;
-    for (const k of [K, O]) { k.fx = {}; k.sc = k.scT = 1; k.grab = k.kin = null; k.alive = true; k.asleep = false; k.mood = 'idle'; k.mouthHold = 0; k.qT = 0; k.vx = k.vy = k.av = 0; k.ang = 0; k.lookAt = null; k.onLand = k.onWall = k.onFxEnd = k.onHop = null; }
+    for (const k of [K, O]) { k.fx = {}; k.sc = k.scT = 1; k.grab = k.kin = null; k.alive = true; k.asleep = false; k.mood = 'idle'; k.mouthHold = 0; k.qT = 0; k.vx = k.vy = k.av = 0; k.ang = 0; k.lookAt = null; k.onLand = k.onWall = k.onFxEnd = k.onHop = null; k.hideK = ice() ? 'stick' : null; }
     K.baseS = U * SHOOT.catch * 1.1; K.x = X(kp.u); K.y = Y(kp.v);
-    O.baseS = U * 0.3; O.x = Math.max(O.baseS * 1.5, geo.bx - U * (role === 'shoot' ? 0.82 : 0.7)); O.y = env.floor - O.baseS;
+    O.baseS = U * 0.3; O.x = Math.max(O.baseS * 1.25, geo.bx - U * (ice() ? 0.8 : role === 'shoot' ? 0.82 : 0.7)); O.y = env.floor - O.baseS;
     K.refreshParts(); O.refreshParts();
   }
   function start(o) {
     c = o.critter; d = c.d; pal = o.pal; sport = o.sport; fxp = App.fx; fxp.clear();
     role = 'shoot'; level = 1; time = 0;
-    root.classList.toggle('ice', sport === 'hockey');
+    root.classList.toggle('ice', ice());
     reset();
   }
-  function stop() { root.classList.remove('on'); for (const k of [c, pal]) if (k) { k.kin = null; k.fx = {}; k.sc = k.scT = 1; } }
+  function stop() { root.classList.remove('on'); for (const k of [c, pal]) if (k) { k.kin = null; k.fx = {}; k.sc = k.scT = 1; k.hideK = null; } }
+  // the friend's next shot: on the ice, sometimes a slapshot, with a longer wind-up the child can see coming
+  function planShot() { const slap = ice() && shotN > 0 && Math.random() < 0.34; plan = { slap, at: slap ? 1.5 : 1.1 }; }
   function nextBall() {
     ball.on = false; ball.out = null; idle = 0; waitT = 0;
     if (role !== 'keep') ptr = null;                        // a keeper's finger stays down from one shot to the next
     if (shotN >= SHOOT.balls) { finish(); return; }
-    phase = 'aim'; syncBar();
+    phase = 'aim'; planShot(); syncBar();
   }
 
+  // how far back the stick has been drawn: the finger went down the screen before it came up
+  const windOf = (t) => (ice() && t ? clamp01(((t.ly - t.y0) / geo.U - 0.1) / 0.45) : 0);
   // A flick becomes a shot: where the swipe points is where the ball goes, and a faster swipe goes higher and gets there sooner.
-  function aim(dx, dy, speed) {
+  function aim(dx, dy, speed, wind = 0) {
     const midY = geo.gy - geo.high * geo.U * 0.5, u = (dx / -dy) * (geo.by - midY) / geo.U;
     const p = clamp01((speed / App.H - 0.4) / 4.4);        // only a really wild swipe sails over the bar
-    return { u: clamp(u, -2.2, 2.2), v: sport === 'hockey' ? SHOOT.ball : lerp(SHOOT.ball, geo.high * 1.12, p), T: lerp(1.0, 0.55, Math.min(1, p * 1.6)) };
+    return { u: clamp(u, -2.2, 2.2), ...ShootRules.power(RU(), p, wind), wind };
   }
   function shoot(s) {
-    ball.on = true; ball.t = 0; ball.T = s.T; ball.u = s.u; ball.v = s.v; ball.out = null; ball.rot = 0; ball.after = 0;
+    ball.on = true; ball.t = 0; ball.T = s.T; ball.u = s.u; ball.v = s.v; ball.out = null; ball.how = ''; ball.wind = s.wind || 0; ball.rot = 0; ball.after = 0;
     phase = 'fly'; shotN++; syncBar();
-    Sound.sfx(sport === 'hockey' ? 'swipe' : 'whoosh', { gain: 0.6 }); Sound.sfx('hop', { gain: 0.5, pitch: -5 });
-    const O = kickerOf(); if (O.standing) O.hop(0, 0.55); O.setMood('wide', 0.5);
+    const O = kickerOf(), hard = ball.wind > 0.3;
+    if (ice()) {                                            // the stick swings through, and the ice sprays
+      stick.t = 0; stick.from = stick.a; stick.to = -(0.6 + 0.8 * ball.wind);
+      Sound.sfx('crack', { gain: hard ? 1 : 0.5, pitch: hard ? -7 : 0 }); if (hard) { Sound.sfx('thud', { gain: 0.7, pitch: 5 }); shake = 4 + 3 * ball.wind; }
+      fxp.burst('dot', geo.bx - geo.U * 0.2, geo.by + geo.U * 0.2, hard ? 16 : 7, { angle: -Math.PI * 0.62, spread: 0.9, speed: geo.U * (hard ? 3.4 : 2), size: 5, life: 0.5, color: '#FFFFFF', g: 900, drag: 2 });
+      O.qv -= 2 + 2 * ball.wind;
+    } else { Sound.sfx('whoosh', { gain: 0.6 }); Sound.sfx('hop', { gain: 0.5, pitch: -5 }); if (O.standing) O.hop(0, 0.55); }
+    O.setMood('wide', 0.5);
   }
   // the ball has reached the goal line: what happened?
   function land() {
-    const R = SHOOT, inside = Math.abs(ball.u) < geo.wide - R.ball && ball.v < geo.high - R.ball;
-    const post = !inside && Math.abs(ball.u) < geo.wide + R.ball * 1.3 && ball.v < geo.high + R.ball * 1.3;
-    const saved = hypot(ball.u - kp.u, ball.v - kp.v) < R.catch + R.ball;
-    ball.out = saved ? 'save' : inside ? 'goal' : post ? 'post' : 'wide'; ball.after = 0;
+    const R = RU(), res = ShootRules.result(R, kp.u, kp.v, ball.u, ball.v), saved = res === 'ring' || res === 'pads';
+    ball.out = saved ? 'save' : res; ball.after = 0;
+    // on the ice a save is one of four things: the catching glove, the blocker, the body or the pads
+    ball.how = !saved ? '' : res === 'pads' ? 'pads' : !ice() ? 'body' : Math.abs(ball.u - kp.u) < 0.09 ? 'body' : ball.u > kp.u ? 'glove' : 'blocker';
     const K = keeperOf(), O = kickerOf(), bx = (ball.x = X(ball.u)), by = (ball.y = Y(ball.v)), good = role === 'shoot' ? ball.out === 'goal' : ball.out === 'save';
     marks.push(good ? 1 : 0);
     if (ball.out === 'save') {
-      ball.vx = (ball.u - kp.u) * geo.U * 5 + rand(-1, 1) * geo.U; ball.vy = -geo.U * 2.2;
-      Sound.sfx('squish', { gain: 0.7 }); K.poke(bx, by, 1.4); K.setMood('proud', 1.4);
+      const side = Math.sign(ball.u - kp.u) || (Math.random() < 0.5 ? -1 : 1);
+      if (ball.how === 'pads') { ball.vx = side * geo.U * rand(1.6, 2.6); ball.vy = geo.U * 0.5; Sound.sfx('thud', { gain: 0.8, pitch: 7 }); }       // kicked out along the ice
+      else { ball.vx = (ball.u - kp.u) * geo.U * 5 + rand(-1, 1) * geo.U; ball.vy = -geo.U * 2.2; Sound.sfx('squish', { gain: 0.7 }); }
+      K.poke(bx, by, 1.4); K.setMood('proud', 1.4);
       Sound.setVoice({ size: 0.45, seed: K.d.seed, style: K.d.voice }); Sound.voice(good ? 'tada' : 'happy'); K.say(0.5);
       fxp.emit('ring', bx, by, { size: geo.U * 0.5, life: 0.4, color: '#fff' });
       fxp.burst('star', bx, by, 9, { speed: geo.U * 2.4, size: 13, life: 0.6, colors: ['#fff', '#FFC928'], drag: 3 });
     } else if (ball.out === 'goal') {
       net.t = 0; net.u = ball.u; net.v = ball.v; shake = 7;
-      Sound.sfx('learn', { gain: 0.8 }); if (good) Sound.sfx('confetti', { gain: 0.6 });
+      if (ice()) { lamp = 0; Sound.sfx('horn', { gain: good ? 1 : 0.45 }); } else Sound.sfx('learn', { gain: 0.8 });
+      if (good) Sound.sfx('confetti', { gain: 0.6 });
       K.setMood(good ? 'dizzy' : 'wide', 1.3);
       if (good) fxp.burst('confetti', bx, by, 34, { angle: -Math.PI / 2, spread: 1.3, speed: 700, size: 11, life: 1.8, colors: PALETTE.slice(0, 9), g: 900, drag: 1.5 });
     } else if (ball.out === 'post') {
       ball.vx = Math.sign(ball.u || 1) * geo.U * 2.4; ball.vy = -geo.U * 1.6; shake = 5;
-      Sound.sfx('crack'); Sound.sfx('thud', { gain: 0.4, pitch: 9 });
+      if (ice()) Sound.sfx('ping'); else { Sound.sfx('crack'); Sound.sfx('thud', { gain: 0.4, pitch: 9 }); }
     } else Sound.sfx('swipe', { gain: 0.3 });
-    if (good) { O.setMood('happy', 1.4); if (O.standing) O.hop(0, 1.1); if (role === 'shoot') { Sound.setVoice({ size: 0.5, seed: d.seed, style: d.voice }); Sound.voice('tada'); c.say(0.5); } }
+    if (good) { O.setMood('happy', 1.4); if (O.standing && !ice()) O.hop(0, 1.1); if (role === 'shoot') { Sound.setVoice({ size: 0.5, seed: d.seed, style: d.voice }); Sound.voice('tada'); c.say(0.5); } }
     else if (role === 'shoot') { c.setMood('wide', 0.8); if (ball.out !== 'save') { Sound.setVoice({ size: 0.5, seed: d.seed, style: d.voice }); Sound.voice('oof'); c.say(0.3); } }
     else { c.setMood('wide', 0.9); if (ball.out === 'goal') { Sound.setVoice({ size: 0.45, seed: pal.d.seed, style: pal.d.voice }); Sound.voice('happy'); pal.say(0.4); } }
-    phase = 'after'; waitT = 1.25;
+    phase = 'after'; waitT = ice() && ball.out === 'goal' ? 1.6 : 1.25;
   }
   // five balls taken: the round counts, whatever the score
   function finish() {
@@ -7803,66 +7879,85 @@ const Shoot = (() => {
     idle = 0;
     if (phase === 'ready') { phase = 'aim'; syncBar(); }
     if (phase !== 'aim' && !(role === 'keep' && (phase === 'fly' || phase === 'after'))) return;
-    ptr = { x: p.x, y: p.y, x0: p.x, y0: p.y, t0: time, trail: [[p.x, p.y, time]] };
+    ptr = { x: p.x, y: p.y, x0: p.x, y0: p.y, t0: time, lx: p.x, ly: p.y, lt: time, trail: [[p.x, p.y, time]] };
   }
   function move(p) {
     if (!ptr) return;
     if (role === 'keep') {                                   // the keeper goes where the finger goes, a little further than the finger
       kp.tu = clamp(kp.tu + ((p.x - ptr.x) / geo.U) * 1.35, -geo.wide, geo.wide);
-      if (sport === 'soccer') kp.tv = clamp(kp.tv - ((p.y - ptr.y) / geo.U) * 1.35, geo.rest, geo.high - 0.12);
+      kp.tv = clamp(kp.tv - ((p.y - ptr.y) / geo.U) * 1.35, geo.rest, ShootRules.top(RU()));
     }
     ptr.x = p.x; ptr.y = p.y; ptr.trail.push([p.x, p.y, time]);
+    if (p.y > ptr.ly) { ptr.ly = p.y; ptr.lx = p.x; ptr.lt = time; }           // the lowest the finger has been: a shot is measured from there
     if (ptr.trail.length > 24) ptr.trail.shift();
   }
   function up(p) {
     const t = ptr; ptr = null;
     if (!t || role !== 'shoot' || phase !== 'aim') return;
-    const dx = t.x - t.x0, dy = t.y - t.y0;
-    if (dy > -24) { if (hypot(dx, dy) < 14) { c.poke(c.x, c.y); idle = 9; } return; }         // not a flick: show how again
+    const dx = t.x - t.lx, dy = t.y - t.ly;
+    if (dy > -24) { if (hypot(t.x - t.x0, t.y - t.y0) < 14) { c.poke(c.x, c.y); idle = 9; } return; }         // not a flick: show how again
     // how fast the finger was going as it let go
     const old = t.trail.find((q) => time - q[2] < 0.12) || t.trail[0], dt = Math.max(0.016, time - old[2]);
-    const speed = Math.max(hypot(t.x - old[0], t.y - old[1]) / dt, hypot(dx, dy) / Math.max(0.05, time - t.t0));
-    shoot(aim(dx, dy, speed));
+    const speed = Math.max(hypot(t.x - old[0], t.y - old[1]) / dt, hypot(dx, dy) / Math.max(0.05, time - t.lt));
+    shoot(aim(dx, dy, speed, windOf(t)));
   }
 
   // ----- frame -----
   function step(dt) {
     time += dt; idle += dt;
-    flash = Math.max(0, flash - dt * 1.6); shake = Math.max(0, shake - dt * 40); net.t += dt;
-    const K = keeperOf(), O = kickerOf(), R = SHOOT, lv = R.keeper[level - 1];
+    flash = Math.max(0, flash - dt * 1.6); shake = Math.max(0, shake - dt * 40); net.t += dt; lamp += dt;
+    const K = keeperOf(), O = kickerOf(), R = SHOOT, G = RU(), lv = R.keeper[level - 1], was = kp.u;
     if (role === 'shoot') {
-      if (phase === 'fly' && ball.t > lv.wait) {              // the keeper goes for it
-        const tu = clamp(ball.u, -geo.wide + 0.1, geo.wide - 0.1), tv = sport === 'hockey' ? geo.rest : clamp(ball.v, geo.rest, geo.high - 0.14);
-        const du = tu - kp.u, dv = tv - kp.v, dd = hypot(du, dv), go = Math.min(dd, lv.speed * (SHOOT[sport].quick || 1) * dt);
-        if (dd > 1e-4) { kp.u += (du / dd) * go; kp.v += (dv / dd) * go; }
-      } else if (phase !== 'fly' && phase !== 'after') {      // waiting: wander along the line
+      if (phase === 'fly' && ball.t > lv.wait) ShootRules.chase(G, lv, kp, ball.u, ball.v, dt);    // the keeper goes for it
+      else if (phase !== 'fly' && phase !== 'after') {      // waiting: wander along the line
         kp.tu = Math.sin(time * 1.5 + kp.ph) * lv.sway * geo.wide;
         kp.u += clamp(kp.tu - kp.u, -lv.speed * 0.6 * dt, lv.speed * 0.6 * dt); kp.v = damp(kp.v, geo.rest, 6, dt);
       } else if (phase === 'after' && waitT < 0.5) { kp.v = damp(kp.v, geo.rest, 5, dt); }
-    } else if (sport === 'hockey') {                          // on the ice it slides
-      kp.vu += ((kp.tu - kp.u) * 70 - kp.vu * 9) * dt; kp.u = clamp(kp.u + kp.vu * dt, -geo.wide, geo.wide); kp.v = geo.rest;
+    } else if (ice()) {                                     // on the ice it slides
+      kp.vu += ((kp.tu - kp.u) * 70 - kp.vu * 9) * dt; kp.u = clamp(kp.u + kp.vu * dt, -geo.wide, geo.wide); kp.v = damp(kp.v, kp.tv, 18, dt);
     } else { kp.u = damp(kp.u, kp.tu, 22, dt); kp.v = damp(kp.v, kp.tv, 22, dt); }
+    if (ice() && Math.abs(kp.u - was) / dt > 0.9 && Math.random() < dt * 24) fxp.emit('dot', X(kp.u) + rand(-0.3, 0.3) * geo.U, geo.gy + geo.U * 0.02, { size: 4, life: 0.4, color: '#FFFFFF', vx: (was - kp.u) / dt * geo.U * 0.4, vy: -geo.U * 0.7, g: 900 });
 
     // the friend takes its shots, with a wind-up the child can read
     if (role === 'keep' && phase === 'aim') {
       waitT += dt;
       if (waitT > 0.5 && waitT - dt <= 0.5) { O.qv -= 3; O.setMood('think', 0.5); }
-      if (waitT > 1.1) {
+      if (waitT > plan.at) {
         let u = rand(0.25, 0.86) * (lastSide = Math.random() < 0.3 ? lastSide || 1 : -(lastSide || 1)) * geo.wide;
         if (shotN === 0) u *= 0.6;
-        shoot({ u, v: sport === 'hockey' ? R.ball : rand(0.14, geo.high - 0.16), T: R.shot[level - 1] });
+        shoot({ u, v: ice() && Math.random() < 0.4 ? R.ball : rand(0.14, geo.high - 0.16), T: R.shot[level - 1] * (plan.slap ? 0.78 : 1), wind: plan.slap ? 0.9 : 0 });
       }
     }
     if (ball.on && !ball.out) { ball.t += dt; if (ball.t >= ball.T) land(); }
     if (ball.out) {
       ball.after += dt;
-      if (ball.out === 'save' || ball.out === 'post') { ball.vy += geo.U * 9 * dt; ball.x += ball.vx * dt; ball.y += ball.vy * dt; ball.rot += dt * 9; }
+      if (ball.how === 'pads') { ball.vx *= 1 - 1.6 * dt; ball.vy *= 1 - 1.6 * dt; ball.x += ball.vx * dt; ball.y += ball.vy * dt; }
+      else if (ball.out === 'save' || ball.out === 'post') { ball.vy += geo.U * 9 * dt; ball.x += ball.vx * dt; ball.y += ball.vy * dt; ball.rot += dt * 9; }
     }
     if (phase === 'after') { waitT -= dt; if (waitT <= 0) nextBall(); }
 
+    // the stick: drawn back while a finger (or the friend) winds up, swung through on the shot
+    if (ice()) {
+      if (stick.t >= 0) {
+        stick.t += dt;
+        if (stick.t < 0.1) stick.a = lerp(stick.from, stick.to, ease.out(stick.t / 0.1));
+        else { stick.a = lerp(stick.to, 0, ease.inOut(clamp01((stick.t - 0.32) / 0.5))); if (stick.t > 0.82) stick.t = -1; }
+      } else {
+        const want = phase !== 'aim' ? 0 : role === 'shoot' ? (ptr ? 0.2 + windOf(ptr) * 1.2 : 0) : clamp01((waitT - 0.5) / (plan.at - 0.5)) * (plan.slap ? 1.4 : 0.55);
+        stick.a = damp(stick.a, want, 16, dt);
+      }
+      // the keeper's hands go to the puck: the catching glove on one side, the blocker on the other
+      hands.forEach((h, i) => {
+        const side = i ? 1 : -1, mine = ball.on && (ball.out ? ball.out === 'save' && (ball.how === (i ? 'glove' : 'blocker')) : Math.sign(ball.u - kp.u) === side);
+        let tx = 0, ty = 0;
+        if (mine) { const k = ball.out ? 1 : clamp01(ball.t / ball.T) ** 2, hx = side * 0.27, hy = i ? -0.07 : -0.1; tx = clamp(ball.u - kp.u - hx, side > 0 ? -0.2 : -0.06, side > 0 ? 0.06 : 0.2) * k; ty = clamp(ball.v - kp.v - hy, -0.12, 0.3) * k; }
+        h.x = damp(h.x, tx, 18, dt); h.y = damp(h.y, ty, 18, dt);
+      });
+    }
+
     // bodies follow the rules above; they never decide anything
     const lean = clamp((X(kp.u) - K.x) * 0.012, -0.7, 0.7);
-    K.kin = { x: X(kp.u), y: Y(kp.v) + Math.abs(Math.sin(time * 5.5)) * (phase === 'fly' ? 0 : -geo.U * 0.03), a: lean };
+    K.kin = { x: X(kp.u), y: Y(kp.v) + (ice() ? 0 : Math.abs(Math.sin(time * 5.5)) * (phase === 'fly' ? 0 : -geo.U * 0.03)), a: lean * (ice() ? 0.5 : 1) };
     K.lookAt = ball.on ? { x: ball.x, y: ball.y } : { x: geo.bx, y: geo.by };
     K.step(dt, env);
     O.lookAt = ball.on ? { x: ball.x, y: ball.y } : { x: geo.bx, y: geo.gy };
@@ -7870,14 +7965,14 @@ const Shoot = (() => {
     O.step(dt, env);
   }
 
-  // where the ball is on screen, and how big, u01 of the way to the goal line
+  // where the ball is on screen, and how big, s of the way to the goal line. A ball loops; a puck goes straight.
   function ballAt(s) {
-    const e = s, x = lerp(geo.bx, X(ball.u), e), base = lerp(geo.by, Y(ball.v), e), arc = sport === 'hockey' ? 0 : Math.sin(Math.PI * Math.min(1, s)) * geo.U * (0.16 + ball.v * 0.22);
-    return [x, base - arc, lerp(0.2, SHOOT.ball, ease.out(clamp01(s)) * 0.6 + clamp01(s) * 0.4) * geo.U];
+    const x = lerp(geo.bx, X(ball.u), s), base = lerp(geo.by + (ice() ? geo.U * 0.12 : 0), Y(ball.v), s), arc = ice() ? 0 : Math.sin(Math.PI * Math.min(1, s)) * geo.U * (0.16 + ball.v * 0.22);
+    return [x, base - arc, lerp(near(), SHOOT.ball, ease.out(clamp01(s)) * 0.6 + clamp01(s) * 0.4) * geo.U];
   }
   function drawBall(g, x, y, r, rot) {
     g.save(); g.translate(x, y); g.lineJoin = 'round';
-    if (sport === 'hockey') {
+    if (ice()) {
       g.fillStyle = '#2B2D42'; g.beginPath(); g.ellipse(0, r * 0.3, r, r * 0.42, 0, 0, TAU); g.fill(); g.fillRect(-r, -r * 0.1, r * 2, r * 0.4);
       g.fillStyle = '#4A4D6B'; g.beginPath(); g.ellipse(0, -r * 0.1, r, r * 0.42, 0, 0, TAU); g.fill();
       g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = Math.max(1, r * 0.1); g.beginPath(); g.ellipse(0, -r * 0.1, r * 0.6, r * 0.22, 0, 3.4, 4.6); g.stroke();
@@ -7893,7 +7988,7 @@ const Shoot = (() => {
     g.restore();
   }
   function drawGoal(g, front) {
-    const U = geo.U, x0 = X(-geo.wide), x1 = X(geo.wide), y0 = Y(geo.high), y1 = geo.gy, dx = U * 0.16, dy = U * 0.2, ice = sport === 'hockey';
+    const U = geo.U, x0 = X(-geo.wide), x1 = X(geo.wide), y0 = Y(geo.high), y1 = geo.gy, dx = U * 0.16, dy = U * 0.2, rink = ice();
     g.save(); g.lineJoin = g.lineCap = 'round';
     if (!front) {
       // the net: a back wall, pushed out where the ball went in
@@ -7908,19 +8003,96 @@ const Shoot = (() => {
       g.beginPath(); for (const x of [x0, x1]) { g.moveTo(x, y0); g.lineTo(x + (x < geo.bx ? dx : -dx) * 0.6, y0 + dy * 0.5); g.moveTo(x, y1); g.lineTo(x + (x < geo.bx ? dx : -dx), y1 - dy); } g.stroke();
     } else {
       const frame = () => { g.beginPath(); g.moveTo(x0, y1); g.lineTo(x0, y0); g.lineTo(x1, y0); g.lineTo(x1, y1); };
-      frame(); g.strokeStyle = ice ? inkOf('#FF5A4E') : INK; g.lineWidth = U * 0.1; g.stroke();
-      frame(); g.strokeStyle = ice ? '#FF5A4E' : '#FFFDF8'; g.lineWidth = U * 0.06; g.stroke();
+      frame(); g.strokeStyle = rink ? inkOf('#FF5A4E') : INK; g.lineWidth = U * 0.1; g.stroke();
+      frame(); g.strokeStyle = rink ? '#FF5A4E' : '#FFFDF8'; g.lineWidth = U * 0.06; g.stroke();
     }
     g.restore();
   }
 
+  // ----- hockey kit. The game lends it to whoever is playing: it is drawn here, sized by the rules, and never saved on a doodling. -----
+  // the red light behind the net: it spins when a puck goes in
+  function drawLamp(g) {
+    const U = geo.U, x = geo.bx, y = Y(geo.high) - U * 0.2, r = U * 0.09, fade = clamp01((1.7 - lamp) / 0.45), on = fade > 0;
+    g.save();
+    if (on) {
+      const k = 0.65 + 0.35 * Math.sin(lamp * 20) ** 2, gr = g.createRadialGradient(x, y - r * 0.4, 0, x, y - r * 0.4, U * 1.25);
+      gr.addColorStop(0, `rgba(255,70,60,${0.55 * k * fade})`); gr.addColorStop(1, 'rgba(255,70,60,0)');
+      g.fillStyle = gr; g.fillRect(x - U * 1.3, y - U * 1.3, U * 2.6, U * 2.6);
+      g.fillStyle = `rgba(255,120,100,${0.3 * fade})`;
+      for (const a0 of [0, Math.PI]) { const a = lamp * 8 + a0; g.beginPath(); g.moveTo(x, y - r * 0.4); g.lineTo(x + Math.cos(a - 0.2) * U * 1.2, y - r * 0.4 + Math.sin(a - 0.2) * U * 0.7); g.lineTo(x + Math.cos(a + 0.2) * U * 1.2, y - r * 0.4 + Math.sin(a + 0.2) * U * 0.7); g.closePath(); g.fill(); }
+    }
+    g.lineJoin = 'round'; g.lineWidth = Math.max(2, U * 0.022); g.strokeStyle = INK;
+    g.fillStyle = on ? '#FF3B30' : '#C9463F'; g.beginPath(); g.arc(x, y, r, Math.PI, 0); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = on ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.4)'; g.beginPath(); g.ellipse(x - r * 0.35, y - r * 0.5, r * 0.22, r * 0.3, -0.5, 0, TAU); g.fill();
+    g.fillStyle = '#4A4D6B'; g.beginPath(); g.roundRect(x - r * 1.25, y, r * 2.5, r * 0.5, r * 0.2); g.fill(); g.stroke();
+    g.restore();
+  }
+  // a stroke with an ink edge, the way the parts are drawn
+  function inked(g, path, w, col, lw) { path(); g.strokeStyle = INK; g.lineWidth = w; g.stroke(); path(); g.strokeStyle = col; g.lineWidth = Math.max(1, w - lw * 2); g.stroke(); }
+  // the skater's stick, behind the body like any other part; its blade rests on the ice beside the puck
+  // (drawn back, the blade swings down the screen, the way the finger went, and looks a little longer as it comes nearer)
+  function drawStick(g, O) {
+    const U = geo.U, hx = geo.bx - U * 0.36, hy = geo.by + U * 0.22, len = hypot(hx - O.x, hy - O.y) * (1 + 0.22 * clamp01(stick.a / 1.4)), rest = Math.atan2(hy - O.y, hx - O.x), lw = Math.max(2, U * 0.02), bl = U * 0.2;
+    g.save(); g.translate(O.x, O.y); g.rotate(rest + stick.a); g.lineCap = g.lineJoin = 'round';
+    const bx = Math.cos(-rest) * bl, by = Math.sin(-rest) * bl;
+    inked(g, () => { g.beginPath(); g.moveTo(-len * 0.85, 0); g.lineTo(len, 0); }, U * 0.075, '#EAB77A', lw);
+    inked(g, () => { g.beginPath(); g.moveTo(-len * 0.85, 0); g.lineTo(-len * 0.7, 0); }, U * 0.085, '#2B2D42', lw);
+    inked(g, () => { g.beginPath(); g.moveTo(len, 0); g.lineTo(len + bx, by); }, U * 0.1, '#FDFEFF', lw);
+    g.strokeStyle = 'rgba(43,45,66,0.3)'; g.lineWidth = Math.max(1, lw * 0.6);
+    for (const u of [0.3, 0.52, 0.74]) { g.beginPath(); g.moveTo(len + bx * u - by * 0.16, by * u + bx * 0.16); g.lineTo(len + bx * u + by * 0.16, by * u - bx * 0.16); g.stroke(); }
+    g.restore();
+  }
+  // the keeper's pads, stick, blocker and catching glove, over the front of whoever is in goal
+  function drawKeeperKit(g, K) {
+    const U = geo.U, R = SHOOT.hockey, cx = X(kp.u), cy = Y(kp.v), floor = geo.gy + U * 0.03, lw = Math.max(2, U * 0.022);
+    const up = clamp01((kp.v - R.rest) / (ShootRules.top(R) - R.rest)), a = lerp(1.1, 0.1, up), L = U * 0.34, w = U * 0.15;
+    g.save(); g.lineJoin = g.lineCap = 'round';
+    for (const s of [-1, 1]) {                               // the leg pads: flat to the ice when it is down, upright when it stretches
+      g.save(); g.translate(cx + s * U * 0.06, floor - Math.cos(a) * L - w * 0.2); g.rotate(-s * a);
+      const pad = new Path2D(); pad.roundRect(-w / 2, -w * 0.3, w, L + w * 0.3, w * 0.42);
+      g.fillStyle = '#FDFEFF'; g.fill(pad);
+      g.save(); g.clip(pad);
+      g.fillStyle = '#FF5A4E'; g.fillRect(-w, L * 0.08, w * 2, L * 0.13); g.fillStyle = '#35B6F2'; g.fillRect(-w, L * 0.25, w * 2, L * 0.07);
+      g.fillStyle = 'rgba(43,45,66,0.1)'; g.fillRect(s * w * 0.22, -w, w, L * 2);
+      g.strokeStyle = 'rgba(43,45,66,0.25)'; g.lineWidth = lw * 0.7; for (const u of [0.48, 0.64, 0.8]) { g.beginPath(); g.moveTo(-w, L * u); g.lineTo(w, L * u); g.stroke(); }
+      g.restore();
+      g.strokeStyle = INK; g.lineWidth = lw; g.stroke(pad);
+      g.restore();
+    }
+    // the blocker hand and its stick: a wide paddle, the blade flat on the ice between the pads
+    const bh = hands[0], bxp = cx - U * 0.27 + bh.x * U, byp = cy + U * 0.1 - bh.y * U, lift = (kp.v - R.rest) * U * 0.8 + Math.max(0, bh.y) * U;
+    const heel = [cx - U * 0.12 + bh.x * U * 0.5, floor + U * 0.03 - lift];
+    inked(g, () => { g.beginPath(); g.moveTo(bxp - U * 0.05, byp - U * 0.3); g.lineTo(bxp, byp); }, U * 0.055, '#EAB77A', lw);
+    inked(g, () => { g.beginPath(); g.moveTo(bxp, byp); g.lineTo(heel[0], heel[1]); }, U * 0.085, '#EAB77A', lw);
+    inked(g, () => { g.beginPath(); g.moveTo(heel[0], heel[1]); g.lineTo(heel[0] + U * 0.24, heel[1] + U * 0.012); }, U * 0.09, '#FDFEFF', lw);
+    g.save(); g.translate(bxp, byp); g.rotate(-0.1);
+    const blk = new Path2D(); blk.roundRect(-U * 0.07, -U * 0.105, U * 0.14, U * 0.21, U * 0.035);
+    g.fillStyle = '#FDFEFF'; g.fill(blk); g.save(); g.clip(blk); g.fillStyle = '#35B6F2'; g.fillRect(-U * 0.1, -U * 0.04, U * 0.2, U * 0.055); g.fillStyle = '#FF5A4E'; g.fillRect(-U * 0.1, U * 0.035, U * 0.2, U * 0.03); g.restore();
+    g.strokeStyle = INK; g.lineWidth = lw; g.stroke(blk); g.restore();
+    // the catching glove: a round mitt with a deep pocket. A caught puck stays in it.
+    const th = hands[1], tx = cx + U * 0.27 + th.x * U, ty = cy + U * 0.07 - th.y * U, r = U * 0.09;
+    g.save(); g.translate(tx, ty);
+    g.fillStyle = '#FDFEFF'; g.strokeStyle = INK; g.lineWidth = lw;
+    g.beginPath(); g.roundRect(-r * 1.15, r * 0.35, r * 1.2, r * 0.9, r * 0.25); g.fill(); g.stroke();                      // the cuff
+    g.fillStyle = '#FF5A4E'; g.fillRect(-r * 1.0, r * 0.82, r * 0.9, r * 0.2);
+    const mitt = new Path2D(); mitt.moveTo(-r * 0.95, r * 0.25); mitt.bezierCurveTo(-r * 1.25, -r * 0.5, -r * 0.7, -r * 1.05, -r * 0.1, -r * 1.0); mitt.bezierCurveTo(r * 0.75, -r * 1.05, r * 1.2, -r * 0.3, r * 0.95, r * 0.4); mitt.bezierCurveTo(r * 0.7, r * 1.05, -r * 0.5, r * 1.1, -r * 0.95, r * 0.25); mitt.closePath();
+    g.fillStyle = '#FDFEFF'; g.fill(mitt);
+    g.fillStyle = '#D5DCEC'; g.beginPath(); g.ellipse(r * 0.08, -r * 0.02, r * 0.55, r * 0.62, 0.3, 0, TAU); g.fill();       // the pocket
+    g.strokeStyle = 'rgba(43,45,66,0.4)'; g.lineWidth = lw * 0.6; g.beginPath(); g.moveTo(-r * 0.62, -r * 0.5); g.quadraticCurveTo(-r * 0.2, -r * 0.2, -r * 0.5, r * 0.35); g.stroke();   // the thumb
+    g.strokeStyle = INK; g.lineWidth = lw; g.stroke(mitt);
+    if (ball.out === 'save' && ball.how === 'glove') drawBall(g, r * 0.05, -r * 0.05, SHOOT.ball * U * 0.9, 0);
+    g.restore();
+    g.restore();
+  }
+
   function draw(g) {
-    const W = App.W, H = App.H, U = geo.U, K = keeperOf(), O = kickerOf();
+    const W = App.W, H = App.H, U = geo.U, K = keeperOf(), O = kickerOf(), rink = ice();
     g.save();
     if (shake > 0.2) g.translate(rand(-shake, shake), rand(-shake, shake));
     g.drawImage(bg, 0, 0, W, H);
+    if (rink) drawLamp(g);
     drawGoal(g, false);
-    const inNet = ball.out === 'goal';
+    const inNet = ball.out === 'goal', held = ball.out === 'save' && ball.how === 'glove';
     let bx = 0, by = 0, br = 0;
     if (ball.on) {
       if (!ball.out) [bx, by, br] = ballAt(ball.t / ball.T);
@@ -7932,8 +8104,9 @@ const Shoot = (() => {
     }
     if (ball.on && inNet) drawBall(g, bx, by, br, 0);
     // the keeper, and (when the child is keeping) the ring that does the catching
-    g.fillStyle = 'rgba(30,25,60,0.16)'; g.beginPath(); g.ellipse(K.x, geo.gy + U * 0.03, U * 0.26, U * 0.06, 0, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(30,25,60,0.16)'; g.beginPath(); g.ellipse(K.x, geo.gy + U * 0.03, U * (rink ? 0.4 : 0.26), U * 0.06, 0, 0, TAU); g.fill();
     K.draw(g);
+    if (rink) drawKeeperKit(g, K);
     if (role === 'keep' && phase !== 'done') {
       g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = 3; g.setLineDash([8, 9]); g.lineDashOffset = -time * 14;
       g.beginPath(); g.arc(X(kp.u), Y(kp.v), SHOOT.catch * U, 0, TAU); g.stroke(); g.setLineDash([]);
@@ -7946,10 +8119,17 @@ const Shoot = (() => {
       g.strokeStyle = `rgba(255,201,40,${0.5 + 0.5 * (1 - k)})`; g.lineWidth = 4; g.beginPath(); g.arc(x, y, SHOOT.ball * U * (1 + k * 3.2), 0, TAU); g.stroke();
       g.fillStyle = 'rgba(255,201,40,0.9)'; g.beginPath(); g.arc(x, y, 4, 0, TAU); g.fill();
     }
+    if (rink) drawStick(g, O);
     // the ball waiting, or in the air
-    if (!ball.on && phase !== 'done') { g.fillStyle = 'rgba(30,25,60,0.18)'; g.beginPath(); g.ellipse(geo.bx, geo.by + U * 0.2, U * 0.2, U * 0.05, 0, 0, TAU); g.fill(); drawBall(g, geo.bx, geo.by + (sport === 'hockey' ? U * 0.1 : 0), U * 0.2, 0); }
-    if (ball.on && !inNet) {
-      if (!ball.out) { const s = ball.t / ball.T; g.fillStyle = 'rgba(30,25,60,0.16)'; g.beginPath(); g.ellipse(bx, lerp(geo.by + U * 0.2, geo.gy, s), br, br * 0.3, 0, 0, TAU); g.fill(); }
+    if (!ball.on && phase !== 'done') { g.fillStyle = 'rgba(30,25,60,0.18)'; g.beginPath(); g.ellipse(geo.bx, geo.by + U * 0.2, U * near(), U * 0.05, 0, 0, TAU); g.fill(); drawBall(g, geo.bx, geo.by + (rink ? U * 0.12 : 0), U * near(), 0); }
+    if (ball.on && !inNet && !held) {
+      if (!ball.out) {
+        const s = ball.t / ball.T; g.fillStyle = 'rgba(30,25,60,0.16)'; g.beginPath(); g.ellipse(bx, lerp(geo.by + U * 0.2, geo.gy, s), br, br * 0.3, 0, 0, TAU); g.fill();
+        if (ball.wind > 0.3) {                                // a slapshot leaves streaks behind it
+          const [x0, y0] = ballAt(Math.max(0, s - 0.1)); g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = Math.max(2, br * 0.3); g.lineCap = 'round';
+          for (const o of [-0.7, 0, 0.7]) { g.beginPath(); g.moveTo(bx + o * br, by + br * 0.2); g.lineTo(lerp(bx, x0, 0.9) + o * br * 1.5, lerp(by, y0, 0.9) + br * 0.2); g.stroke(); }
+        }
+      }
       drawBall(g, bx, by, br, ball.t * 9 + ball.rot);
     }
     O.drawShadow(g, env.floor); O.draw(g);
@@ -7961,73 +8141,136 @@ const Shoot = (() => {
     g.fillStyle = 'rgba(255,253,248,0.9)'; g.beginPath(); g.roundRect(px - pr * 1.7, py - pr * 1.5, gap * 4 + pr * 3.4, pr * 3, pr * 1.5); g.fill();
     for (let i = 0; i < SHOOT.balls; i++) {
       const x = px + i * gap, m = marks[i], now = i === marks.length && phase !== 'done' && phase !== 'ready';
-      if (m === 1) drawBall(g, x, py + (sport === 'hockey' ? pr * 0.1 : 0), pr, 0);
+      if (m === 1) drawBall(g, x, py + (rink ? pr * 0.1 : 0), pr, 0);
       else { g.fillStyle = m === 0 ? 'rgba(43,45,66,0.2)' : 'rgba(43,45,66,0.08)'; g.beginPath(); g.arc(x, py, pr * (now ? 0.8 + 0.12 * Math.sin(time * 6) : 0.8), 0, TAU); g.fill(); if (m === 0) { g.strokeStyle = 'rgba(43,45,66,0.45)'; g.lineWidth = pr * 0.2; g.lineCap = 'round'; g.beginPath(); g.moveTo(x - pr * 0.3, py - pr * 0.3); g.lineTo(x + pr * 0.3, py + pr * 0.3); g.moveTo(x + pr * 0.3, py - pr * 0.3); g.lineTo(x - pr * 0.3, py + pr * 0.3); g.stroke(); } }
     }
     if (best > 0) { const bob = newBest ? Math.abs(Math.sin(time * 6)) * 5 : 0; drawCrown(g, px + (best - 1) * gap, py - pr * 1.5 - bob, pr * 0.62); }
 
-    // how to play: a finger shows it, until the child does it
+    // how to play: a finger shows it, until the child does it. On the ice every other showing is the slapshot: back first, then forward.
     if ((phase === 'ready' || phase === 'aim') && !ptr && idle > (best ? 4 : 1.2)) {
-      const u = ((idle - 1.2) % 2.2) / 2.2, a = u < 0.1 ? u * 10 : u > 0.85 ? (1 - u) / 0.15 : 1, k = ease.inOut(clamp01((u - 0.2) / 0.45));
-      if (role === 'shoot') drawTouchDot(g, lerp(geo.bx, geo.bx + U * 0.5, k), lerp(geo.by, geo.by - U * 1.1, k), u > 0.12 && u < 0.66 ? 0.6 : 0, a);
-      else drawTouchDot(g, geo.bx + Math.sin(k * TAU) * U * 0.7, geo.gy + U * 0.7, 0.6, a);
+      const n = Math.floor((idle - 1.2) / 2.2), u = ((idle - 1.2) % 2.2) / 2.2, a = u < 0.1 ? u * 10 : u > 0.85 ? (1 - u) / 0.15 : 1, k = ease.inOut(clamp01((u - 0.2) / 0.45)), y0 = geo.by + (rink ? U * 0.1 : 0);
+      if (role !== 'shoot') drawTouchDot(g, geo.bx + Math.sin(k * TAU) * U * 0.7, geo.gy + U * 0.7, 0.6, a);
+      else if (rink && n % 2 === 1) { const back = ease.inOut(clamp01((u - 0.12) / 0.4)), fwd = ease.in(clamp01((u - 0.56) / 0.16)); drawTouchDot(g, geo.bx + fwd * U * 0.35, y0 + back * U * 0.55 - fwd * U * 1.5, u > 0.1 && u < 0.74 ? 0.6 : 0, a); }
+      else drawTouchDot(g, lerp(geo.bx, geo.bx + U * 0.5, k), lerp(y0, y0 - U * 1.1, k), u > 0.12 && u < 0.66 ? 0.6 : 0, a);
     }
     if (flash > 0.01) { g.fillStyle = `rgba(255,252,235,${flash * flash})`; g.fillRect(0, 0, W, H); }
   }
 
   return { build, start, stop, step, draw, down, move, up, resize: () => { if (c) { layout(); place(); } },
     // read-only peek for the automated play-through; aim is exposed so the test can check the rules ignore the doodling
-    peek: () => ({ phase, sport, role, level, shotN, marks: marks.slice(), best, newBest, geo: { ...geo }, kp: { u: kp.u, v: kp.v }, ball: { on: ball.on, out: ball.out, u: ball.u, v: ball.v, t: ball.t, T: ball.T }, keeperS: keeperOf() ? keeperOf().baseS : 0 }) };
+    peek: () => ({ phase, sport, role, level, shotN, marks: marks.slice(), best, newBest, geo: { ...geo }, kp: { u: kp.u, v: kp.v }, ball: { on: ball.on, out: ball.out, how: ball.how, wind: ball.wind, u: ball.u, v: ball.v, t: ball.t, T: ball.T }, keeperS: keeperOf() ? keeperOf().baseS : 0, lamp: lamp < 1.7, stick: stick.a, bar: root.classList.contains('on') }) };
 })();
 
 // ===== cup.js =====
 // ---------- Cup: the doodling races on its own, and the child watches ----------
-// The whole race is worked out before it is shown (simulate): from each racer's abilities, the one snack packed for it,
+// A course is made of the things the trail already taught: a wall, a pond, a block of ice. Each one asks for one ability,
+// and the snack that solves it on the trail solves it here: jelly bounces the wall, an ice pop freezes the pond, a pepper melts the ice.
+// The child sees the whole course first, and lays the snacks from a small lunchbox on the plates in front of the things
+// their doodling will find hardest. Everything else is up to what the doodling has grown.
+// The whole race is worked out before it is shown (simulate): from each racer's abilities, the plates that were filled,
 // and a dice roll that starts from a number we keep. The pictures then follow that result, so a slow tablet and a fast one
 // show the same race, and watching it again shows the same race again.
 // The position in this list is saved (d.grow.cups): only ever add to the end.
 const CUPS = [
-  { k: 'meadow', place: 'meadow', course: ['dash', 'hurdle', 'beam', 'dash'], rivals: [0, 1] },
-  { k: 'snow', place: 'snow', course: ['dash', 'hurdle', 'beam', 'hill', 'hurdle', 'dash'], rivals: [1, 3] },
-  { k: 'star', place: 'night', course: ['dash', 'hurdle', 'hill', 'beam', 'hurdle', 'beam', 'hurdle', 'dash'], rivals: [3, 5] },
+  { k: 'meadow', place: 'meadow', course: ['dash', 'wall', 'pond', 'dash'], rivals: [0, 2] },
+  { k: 'snow', place: 'snow', course: ['dash', 'wall', 'pond', 'ice', 'wall', 'dash'], rivals: [1, 3] },
+  { k: 'star', place: 'night', course: ['dash', 'wall', 'ice', 'pond', 'wall', 'pond', 'wall', 'dash'], rivals: [2, 5] },
 ];
-const CUP_PACK = ['jelly', 'ice', 'pepper'];               // the snack that can be packed for each ability: hop, steady, puff
-const SEC_LEN = { dash: 5, hurdle: 3, beam: 5, hill: 5 };
+const CUP_PACK = ['jelly', 'ice', 'pepper'];               // the snack that helps with each ability: hop, steady, puff
+const CUP_THING = { wall: 0, pond: 1, ice: 2 };            // the ability each thing asks for (and so, through CUP_PACK, the snack that gets past it)
+const CUP_BOX = 2;                                         // how many snacks the lunchbox holds: fewer than a long course has things, so there is something to decide
+const SEC_LEN = { dash: 3.4, wall: 3.4, pond: 5.6, ice: 3.6 };
+const CUP_PLATE = 0.5;                                     // how far into its stretch a thing's plate stands
+
+// One picture for each thing on a course. The same drawing is used on the track, on the card that offers the cup and in the
+// strip that tells how the race went. (x, y) is where it stands on the ground, s is how tall a wall is.
+function drawCupThing(g, k, x, y, s, o = {}) {
+  g.save(); g.translate(x, y); g.scale(s, s); g.lineJoin = g.lineCap = 'round';
+  const lw = o.lw || 0.07;
+  if (k === 'wall') {                                      // the trail's wall: stones, moss and one flower
+    const w = 0.74, rh = 0.28; g.lineWidth = lw; g.strokeStyle = '#6E5A48';
+    [[0.12, '#D9C7AE', '#BDA68B'], [-0.14, '#C7B299', '#D9C7AE'], [0.06, '#B49C82', '#CDB89E']].forEach(([cut, a, b], j) => {
+      const yy = -(j + 1) * rh;
+      g.fillStyle = a; g.beginPath(); g.roundRect(-w / 2, yy, w / 2 + cut * w, rh, rh * 0.28); g.fill(); g.stroke();
+      g.fillStyle = b; g.beginPath(); g.roundRect(cut * w, yy, w / 2 - cut * w, rh, rh * 0.28); g.fill(); g.stroke();
+    });
+    g.fillStyle = '#6CC58E'; g.strokeStyle = '#2F8F5F';
+    for (const [dx, r] of [[-0.24, 0.1], [0.02, 0.13], [0.26, 0.09]]) { g.beginPath(); g.arc(dx, -0.84, r, Math.PI, 0); g.closePath(); g.fill(); g.stroke(); }
+    g.fillStyle = '#FF6FB5'; g.beginPath(); g.arc(0.04, -1.0, 0.055, 0, TAU); g.fill();
+  } else if (k === 'ice') {                                // the trail's block of ice; o.melt runs from 0 (whole) to 1 (a puddle)
+    const m = clamp01(o.melt || 0), h = 1.05 * (1 - ease.inOut(m));
+    if (m > 0) { g.fillStyle = 'rgba(160,220,248,0.8)'; g.beginPath(); g.ellipse(0, 0.03, 0.34 + m * 0.3, 0.07 + m * 0.03, 0, 0, TAU); g.fill(); }
+    if (h > 0.04) {
+      const p = new Path2D(); p.moveTo(-0.36, 0); p.lineTo(-0.29, -h * 0.86); p.quadraticCurveTo(-0.1, -h * 1.08, 0.12, -h * 0.98); p.lineTo(0.29, -h * 0.8); p.lineTo(0.36, 0); p.closePath();
+      const gr = g.createLinearGradient(-0.36, -h, 0.36, 0); gr.addColorStop(0, '#E9FAFF'); gr.addColorStop(0.55, '#A9E0F7'); gr.addColorStop(1, '#6FC3EA');
+      g.globalAlpha = 0.95; g.fillStyle = gr; g.fill(p); g.globalAlpha = 1;
+      g.save(); g.clip(p);
+      g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 0.09; g.beginPath(); g.moveTo(-0.2, -h * 0.2); g.lineTo(-0.1, -h * 0.8); g.stroke();
+      g.strokeStyle = 'rgba(60,150,200,0.45)'; g.lineWidth = 0.035; g.beginPath(); g.moveTo(0.1, 0); g.lineTo(0.16, -h * 0.5); g.lineTo(0.06, -h * 0.72); g.stroke();
+      g.restore();
+      g.strokeStyle = '#3E9CCB'; g.lineWidth = lw; g.stroke(p);
+    }
+  } else if (k === 'pond') {                               // water with a log across it; o.frozen = iced over
+    const gr = g.createLinearGradient(0, -0.34, 0, 0.1); gr.addColorStop(0, o.frozen ? '#F3FBFF' : '#59C3F0'); gr.addColorStop(1, o.frozen ? '#CDEBFA' : '#2E86D0');
+    g.fillStyle = gr; g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = lw; g.beginPath(); g.ellipse(0, -0.12, 0.86, 0.24, 0, 0, TAU); g.fill(); g.stroke();
+    g.strokeStyle = o.frozen ? 'rgba(120,190,230,0.8)' : 'rgba(255,255,255,0.65)'; g.lineWidth = 0.045;
+    for (const [dx, dy] of [[-0.5, -0.1], [0.28, -0.02], [-0.05, -0.24]]) { g.beginPath(); g.moveTo(dx, dy); g.lineTo(dx + 0.22, dy - (o.frozen ? 0.05 : 0)); g.stroke(); }
+    if (!o.frozen) {
+      g.fillStyle = '#8A5A44'; g.strokeStyle = inkOf('#8A5A44'); g.lineWidth = lw;
+      for (const dx of [-0.62, 0.62]) { g.beginPath(); g.roundRect(dx - 0.07, -0.44, 0.14, 0.3, 0.04); g.fill(); g.stroke(); }
+      g.fillStyle = '#B9825E'; g.beginPath(); g.roundRect(-0.8, -0.56, 1.6, 0.17, 0.08); g.fill(); g.stroke();
+    }
+  } else {                                                 // the start (a pennant) and the finish (a chequered flag)
+    g.strokeStyle = INK; g.lineWidth = lw * 1.3; g.beginPath(); g.moveTo(-0.3, 0); g.lineTo(-0.3, -1.1); g.stroke();
+    if (k === 'start') { g.fillStyle = '#FFC928'; g.lineWidth = lw; g.beginPath(); g.moveTo(-0.3, -1.1); g.lineTo(0.42, -0.86); g.lineTo(-0.3, -0.6); g.closePath(); g.fill(); g.stroke(); }
+    else { g.fillStyle = '#fff'; g.fillRect(-0.3, -1.1, 0.78, 0.52); g.fillStyle = INK; for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) if ((i + j) % 2 === 0) g.fillRect(-0.3 + i * 0.26, -1.1 + j * 0.26, 0.26, 0.26); g.lineWidth = lw; g.strokeRect(-0.3, -1.1, 0.78, 0.52); }
+  }
+  g.restore();
+}
 
 const Cup = (() => {
   // ----- the race itself: numbers in, a story out. No drawing, no clock. -----
-  // racers: [{ lv: [hop, steady, puff] }], each 0 to 6 (five pips and perhaps a packed snack)
+  // racers: [{ lv: [hop, steady, puff], help: [which things on the course had a snack laid before them] }], each level 0 to 5
   function simulate(cup, racers, seed) {
     const r = rng(seed);
     const lanes = racers.map((R) => {
-      const n = R.lv.map((v) => clamp(v, 0, 6) / 5), all = (n[0] + n[1] + n[2]) / 3;
+      const n = R.lv.map((v) => clamp(v, 0, 6) / 5), all = (n[0] + n[1] + n[2]) / 3, help = R.help || [];
       const pace = (2.05 + 0.26 * n[2] + 0.16 * all) * (0.93 + r() * 0.14);    // course units a second on the flat: a good day or a slow one
       let t = 0.15 + r() * 0.2 + (1 - Math.min(1, all)) * r() * 0.3, x = 0, energy = 1;
       const segs = [{ kind: 'wait', t0: 0, t1: t, x0: 0, x1: 0 }], story = [];
       const go = (kind, len, speed, sec) => { const t1 = t + len / speed; segs.push({ kind, t0: t, t1, x0: x, x1: x + len, sec }); t = t1; x += len; };
       const stop = (kind, secs, sec, len = 0) => { segs.push({ kind, t0: t, t1: t + secs, x0: x, x1: x + len, sec }); t += secs; x += len; };
       cup.course.forEach((sec, i) => {
+        // the right snack was waiting: the thing goes as well as it could for anyone, and no better. So a snack is worth most
+        // where a doodling is weakest, and where to lay the lunchbox is a real choice. The three things are set to cost about the
+        // same when they go badly (a second to a second and a half with no pips), so no one snack is always the one to take.
+        const fed = help.includes(i);
         if (sec === 'dash') {
-          if (i < cup.course.length - 1) go('run', 5, pace, i);
-          else { go('sprint', 5, pace * (0.78 + 0.5 * energy), i); story.push({ sec: 'finish', q: 2, ok: energy > 0.6 ? 2 : energy > 0.35 ? 1 : 0 }); }   // what is left in the tank
-        } else if (sec === 'hurdle') {                       // hop: over cleanly, or clip it and tumble. steady: how soon it is up again
+          if (i < cup.course.length - 1) go('run', SEC_LEN.dash, pace, i);
+          else { go('sprint', SEC_LEN.dash, pace * (0.78 + 0.5 * energy), i); story.push({ i, sec: 'finish', q: 2, ok: energy > 0.6 ? 2 : energy > 0.35 ? 1 : 0 }); }   // what is left in the tank
+        } else if (sec === 'wall') {                         // hop: over cleanly, or catch the top and tumble. steady: how soon it is up again
           const clean = r() < 0.28 + 0.66 * Math.min(1, n[0]);
-          go('run', 1, pace, i);
-          if (clean) { go('jump', 1.4, pace * 1.05, i); go('run', 0.6, pace, i); }
-          else { go('clip', 1.4, pace * 0.8, i); stop('tumble', 1.25 - 0.75 * Math.min(1, n[1]), i, 0.3); go('run', 0.3, pace, i); }
-          story.push({ sec, q: 0, ok: clean ? 2 : 0 }); energy -= clean ? 0.03 : 0.1;
-        } else if (sec === 'beam') {                         // steady: straight across, or wobbling, or a splash
+          go('run', 1.4, pace, i);
+          if (fed) { go('boing', 1.4, pace * 1.1, i); go('run', 0.6, pace, i); }
+          else if (clean) { go('jump', 1.4, pace * 1.05, i); go('run', 0.6, pace, i); }
+          else { go('clip', 1.4, pace * 0.7, i); stop('tumble', 1.7 - 0.9 * Math.min(1, n[1]), i, 0.3); go('run', 0.3, pace, i); }
+          story.push({ i, sec, q: 0, ok: fed || clean ? 2 : 0, fed }); energy -= fed ? 0 : clean ? 0.03 : 0.1;
+        } else if (sec === 'pond') {                         // steady: straight along the log, or wobbling, or a splash
           const sure = r() < 0.22 + 0.72 * Math.min(1, n[1]), fall = !sure && r() < 0.5 - 0.4 * Math.min(1, n[1]);
+          go('run', 1.1, pace, i);
+          if (fed) go('slide', 4, pace * 0.95, i);
+          else if (sure) go('beam', 4, pace * 0.92, i);
+          else if (!fall) go('wobble', 4, pace * 0.66, i);
+          else { go('wobble', 2, pace * 0.66, i); stop('splash', 1.2, i); go('wobble', 2, pace * 0.7, i); }
           go('run', 0.5, pace, i);
-          if (sure) go('beam', 4, pace * 0.92, i);
-          else if (!fall) go('wobble', 4, pace * 0.56, i);
-          else { go('wobble', 2, pace * 0.56, i); stop('splash', 1.5, i); go('wobble', 2, pace * 0.62, i); }
-          go('run', 0.5, pace, i);
-          story.push({ sec, q: 1, ok: sure ? 2 : fall ? 0 : 1 }); energy -= sure ? 0.03 : 0.1;
-        } else if (sec === 'hill') {                         // puff: how fast it gets up the slope
-          const k = 0.48 + 0.52 * Math.min(1, n[2]);
-          go('climb', 2.5, pace * k, i); go('down', 2.5, pace * 1.15, i);
-          story.push({ sec, q: 2, ok: n[2] >= 0.6 ? 2 : n[2] >= 0.2 ? 1 : 0 }); energy -= 0.3 * (1 - 0.75 * Math.min(1, n[2]));
+          story.push({ i, sec, q: 1, ok: fed || sure ? 2 : fall ? 0 : 1, fed }); energy -= fed ? 0 : sure ? 0.03 : 0.1;
+        } else if (sec === 'ice') {                          // puff: how long it takes to blow the block away
+          const k = Math.min(1, n[2]), wait = (1.5 - 1.35 * k) * (0.9 + r() * 0.2);
+          go('run', 1.3, pace, i);
+          if (fed) go('blaze', 1.0, pace * 1.1, i);
+          else { stop('melt', wait, i); go('run', 1.0, pace, i); }
+          go('run', 1.3, pace, i);
+          story.push({ i, sec, q: 2, ok: fed || k >= 0.6 ? 2 : k >= 0.2 ? 1 : 0, fed }); energy -= fed ? 0 : 0.26 * (1 - 0.75 * k);
         }
         energy -= 0.07 * (1 - 0.8 * Math.min(1, n[2]));
       });
@@ -8038,102 +8281,127 @@ const Cup = (() => {
   }
 
   // ----- the screen -----
-  let root, packEls = [], goBtn, watchBtn, againBtn;
+  let root, packEls = [], boxEl = null, boxG = null, goBtn, watchBtn, againBtn;
   let c = null, d = null, fxp = null, crowd = [], phase = 'pick', cupI = 0, cup = CUPS[0], time = 0;
-  let racers = [], res = null, seed = 1, rt = 0, pack = -1, replay = false, podT = 0, medal = -1, lights = 0, ptr = null, ate = false;
-  let S = 50, unit = 60, F = 0, X0 = 0, L = 0, cam = 0, secs = [], backdrop = null, amb = null, theme = null, pick = { nodes: [], R: 50, thumbs: {} }, knocked = {};
+  let racers = [], res = null, seed = 1, rt = 0, replay = false, podT = 0, medal = -1, lights = 0, ptr = null, idle = 0;
+  let plates = [], frozen = {}, melt = {}, seen = {}, pan = 9, scroll = 0, zoom = 1;        // zoom: the line-up is seen from further off, so more of the course fits      // the plates in the child's lane; what the race has done to the course so far
+  let S = 50, unit = 60, F = 0, X0 = 0, L = 0, cam = 0, secs = [], backdrop = null, amb = null, theme = null, pick = { nodes: [], w: 300, h: 120, thumbs: {} };
   let gap = 60, rs = 30, P = 50, PF = 0;                   // lane spacing, a racer's size, and the podium's own size and floor
   const env = { g: 0, floor: 1e6, left: -1e6, right: 1e6, top: -1e6 };
+  const PAN = 2.5;                                         // the look along the course before the child takes over: seconds
   // four lanes, one above the other on the screen; the child's own doodling runs in the front one (lane 3)
   const laneY = (i) => F - (3 - i) * gap, laneK = (i) => 1 - (3 - i) * 0.05, laneX = (x, i) => X0 + x * unit + (3 - i) * S * 0.42;
   const mine = () => racers[racers.length - 1];
+  const packed = () => plates.filter((p) => p.on).length, camMax = () => Math.max(0, L - App.W / zoom);
+  // far enough off to see nine or ten steps of course, and (on a phone held sideways) to leave room above the track for the signs
+  const zoomOut = () => clamp(Math.min(App.W / (unit * 9.5), (F - 150) / (gap * 3.72)), 0.55, 1);
+  const scr = (wx, wy) => [(wx - cam) * zoom, F + (wy - F) * zoom], world = (p) => [p.x / zoom + cam, F + (p.y - F) / zoom];
+  const snack = (g, k, x, y, r, a = 1) => { g.save(); g.globalAlpha *= a; g.translate(x, y); g.scale(r, r); Snacks[k](g, { t: time, lw: 2.6 / r }); g.restore(); };
 
   function build(parent) {
     root = el('div', 'cupbar', parent);
+    boxEl = el('div', 'box', root); boxEl.setAttribute('aria-label', 'Lunchbox'); boxG = miniCanvas(54, boxEl)[1];
     const packs = el('div', 'packs', root);
     CUP_PACK.forEach((k, q) => {
       const b = el('button', 'thumb snack pack', packs); b.type = 'button'; b.setAttribute('aria-label', 'Pack ' + k); b.style.setProperty('--q', QUALS[q].col);
       const [, g] = miniCanvas(58, b);
-      g.save(); g.translate(29, 27); g.scale(19, 19); Snacks[k](g, { t: 0, lw: 2.6 / 19 }); g.restore();
-      drawQual(g, q, 46, 46, 8);
-      b.addEventListener('click', () => { Sound.unlock(); if (phase !== 'line') return; pack = pack === q ? -1 : q; Sound.sfx(pack < 0 ? 'undo' : 'pick', { pitch: q * 3 }); syncBar(); });
+      g.save(); g.translate(27, 25); g.scale(18, 18); Snacks[k](g, { t: 0, lw: 2.6 / 18 }); g.restore();
+      const thing = Object.keys(CUP_THING).find((t) => CUP_THING[t] === q);     // and, small, the thing it gets a doodling past
+      g.fillStyle = '#FFFDF8'; g.beginPath(); g.arc(45, 45, 12, 0, TAU); g.fill(); g.strokeStyle = QUALS[q].col; g.lineWidth = 2; g.stroke();
+      drawCupThing(g, thing, 45, thing === 'pond' ? 50 : 53, thing === 'pond' ? 11 : 15, { lw: 0.1 });
+      b.addEventListener('click', () => { Sound.unlock(); if (phase === 'line') packSnack(q); });
       packEls.push(b);
     });
     goBtn = iconBtn('play', 'primary go', root, 'Go', go);
     watchBtn = iconBtn('rewind', '', root, 'Watch it again', () => { Sound.sfx('page'); replay = true; startRace(); });
     againBtn = iconBtn('again', 'primary', root, 'Again', () => { Sound.sfx('page'); lineUp(cupI); });
   }
-  function syncBar() {
-    root.dataset.phase = phase;
-    packEls.forEach((b, q) => b.classList.toggle('on', pack === q));
-    goBtn.classList.toggle('glow', phase === 'line');
-    GrowHud.boost(phase === 'line' || phase === 'count' ? pack : -1);
-  }
-
-  // ----- choosing a cup -----
-  function open(o) {
-    c = o.critter; d = c.d; crowd = o.crowd; fxp = App.fx; fxp.clear(); time = 0;
-    theme = worldTheme(d.color);
-    phase = 'pick'; layoutPick(); syncBar();
-  }
-  function stop() { root.dataset.phase = ''; GrowHud.boost(-1); for (const R of racers) { R.c.kin = null; R.c.fx = {}; R.c.sc = R.c.scT = 1; } racers = []; }
-  function layoutPick() {
-    const W = App.W, H = App.H, wide = W > H * 1.05, top = 84, n = CUPS.length;
-    pick.R = clamp(wide ? Math.min(W / (n * 3.1), (H - top) * 0.2) : Math.min(W * 0.17, (H - top) / (n * 3.3)), 34, 92);
-    pick.nodes = CUPS.map((q, i) => (wide ? { x: (W * (i + 0.5)) / n, y: top + (H - top) * 0.36, i } : { x: W * 0.3, y: top + ((H - top) * (i + 0.5)) / n, i }));
-    pick.wide = wide;
-    for (const q of CUPS) if (!pick.thumbs[q.place]) pick.thumbs[q.place] = Places.thumb(q.place, 120, worldTheme(PALETTE[2]));
-  }
-  // a small picture of one thing in the way
-  function glyph(g, k, x, y, s, col = INK) {
-    g.save(); g.translate(x, y); g.scale(s, s); g.lineCap = g.lineJoin = 'round'; g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 0.2;
-    if (k === 'hurdle') { g.beginPath(); g.moveTo(-0.7, 0.8); g.lineTo(-0.7, -0.5); g.moveTo(0.7, 0.8); g.lineTo(0.7, -0.5); g.stroke(); g.lineWidth = 0.3; g.beginPath(); g.moveTo(-0.9, -0.45); g.lineTo(0.9, -0.45); g.stroke(); }
-    else if (k === 'beam') { g.lineWidth = 0.32; g.beginPath(); g.moveTo(-0.95, -0.1); g.lineTo(0.95, -0.1); g.stroke(); g.lineWidth = 0.18; g.beginPath(); g.moveTo(-0.8, 0.7); g.quadraticCurveTo(-0.4, 0.4, 0, 0.7); g.quadraticCurveTo(0.4, 1.0, 0.8, 0.7); g.stroke(); }
-    else if (k === 'hill') { g.beginPath(); g.moveTo(-1, 0.75); g.bezierCurveTo(-0.5, 0.75, -0.5, -0.7, 0, -0.7); g.bezierCurveTo(0.5, -0.7, 0.5, 0.75, 1, 0.75); g.closePath(); g.fill(); }
-    else { g.beginPath(); g.moveTo(-0.6, 0.9); g.lineTo(-0.6, -0.85); g.stroke(); for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) if ((i + j) % 2 === 0) g.fillRect(-0.5 + i * 0.42, -0.85 + j * 0.42, 0.42, 0.42); g.lineWidth = 0.1; g.strokeRect(-0.5, -0.85, 1.26, 0.84); }
+  // the lunchbox: one round window for each snack it holds
+  function drawBox() {
+    const g = boxG, on = plates.filter((p) => p.on);
+    g.clearRect(0, 0, 54, 54); g.save(); g.lineJoin = g.lineCap = 'round'; g.strokeStyle = INK; g.lineWidth = 2.4;
+    g.beginPath(); g.moveTo(19, 13); g.quadraticCurveTo(19, 5, 27, 5); g.quadraticCurveTo(35, 5, 35, 13); g.stroke();
+    g.fillStyle = '#FF8D84'; g.beginPath(); g.roundRect(4, 12, 46, 36, 9); g.fill(); g.stroke();
+    g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(8, 16, 38, 4);
+    for (let i = 0; i < CUP_BOX; i++) {
+      const x = 27 + (i - (CUP_BOX - 1) / 2) * 21, p = on[i];
+      g.fillStyle = p ? '#FFFDF8' : 'rgba(43,45,66,0.2)'; g.beginPath(); g.arc(x, 32, 8.5, 0, TAU); g.fill();
+      if (p) { g.save(); g.translate(x, 32); g.scale(7.5, 7.5); Snacks[CUP_PACK[p.q]](g, { t: 0, lw: 0.3 }); g.restore(); }
+    }
     g.restore();
   }
+  function syncBar() {
+    root.dataset.phase = phase;
+    const full = packed() >= CUP_BOX;
+    packEls.forEach((b, q) => {
+      const here = plates.some((p) => p.q === q), free = plates.some((p) => p.q === q && !p.on);
+      b.style.display = here ? '' : 'none'; b.classList.toggle('used', !free || full); b.classList.toggle('on', plates.some((p) => p.q === q && p.on));
+    });
+    goBtn.classList.toggle('glow', phase === 'line');
+    if (boxG) drawBox();
+  }
+
+  // ----- choosing a cup: each one is a picture of its own course -----
+  function open(o) {
+    c = o.critter; d = c.d; crowd = o.crowd; fxp = App.fx; fxp.clear(); time = 0; idle = 0;
+    theme = worldTheme(d.color);
+    phase = 'pick'; plates = []; layoutPick(); syncBar();
+  }
+  function stop() { root.dataset.phase = ''; for (const R of racers) { R.c.kin = null; R.c.fx = {}; R.c.sc = R.c.scT = 1; } racers = []; }
+  function layoutPick() {
+    const W = App.W, H = App.H, low = H < 520, top = low ? 78 : 104, n = CUPS.length, room = H - top - (low ? 8 : 26);
+    pick.w = Math.min(W - 28, 760); pick.h = clamp(room / n - (low ? 8 : 16), 56, 176);
+    const each = room / n;
+    pick.nodes = CUPS.map((q, i) => ({ x: W / 2, y: top + each * (i + 0.5), i }));
+    for (const q of CUPS) if (!pick.thumbs[q.place]) pick.thumbs[q.place] = Places.thumb(q.place, 240, worldTheme(PALETTE[2]));
+  }
   function drawPick(g) {
-    const W = App.W, H = App.H, R = pick.R, G = Grow.of(d);
+    const W = App.W, w = pick.w, h = pick.h, G = Grow.of(d);
     Fair.backdrop(g);
     const next = Math.max(0, G.cups.findIndex((m) => m < 3));
     pick.nodes.forEach((nd, i) => {
-      const q = CUPS[i], r = R * (i === next ? 1 + 0.04 * Math.sin(time * 5) : 1);
-      g.save(); g.translate(nd.x, nd.y);
-      g.fillStyle = 'rgba(43,45,66,0.2)'; g.beginPath(); g.ellipse(0, r * 0.98, r * 0.95, r * 0.24, 0, 0, TAU); g.fill();
-      g.save(); g.beginPath(); g.arc(0, 0, r, 0, TAU); g.clip(); g.drawImage(pick.thumbs[q.place], -r * 1.5, -r, r * 3, r * 2); g.restore();
-      g.strokeStyle = '#FFFDF8'; g.lineWidth = r * 0.14; g.beginPath(); g.arc(0, 0, r, 0, TAU); g.stroke();
-      g.strokeStyle = INK; g.lineWidth = Math.max(2, r * 0.045); g.beginPath(); g.arc(0, 0, r * 1.07, 0, TAU); g.stroke();
-      // what is on the course, so a longer one looks longer
-      const list = q.course.filter((k) => k !== 'dash').concat('flag'), room = pick.wide ? W / CUPS.length - 24 : W - nd.x - r * 1.35 - 12;
-      const gs = Math.min(r * 0.2, room / (list.length * 2.5 + 0.9)), gx = pick.wide ? -((list.length - 1) * gs * 2.5) / 2 : r * 1.35 + gs * 1.7, gy = pick.wide ? r * 1.55 : r * 0.5;
-      g.fillStyle = 'rgba(255,253,248,0.9)'; g.beginPath(); g.roundRect(gx - gs * 1.7, gy - gs * 1.6, (list.length - 1) * gs * 2.5 + gs * 3.4, gs * 3.2, gs * 1.6); g.fill();
-      list.forEach((k, j) => glyph(g, k, gx + j * gs * 2.5, gy, gs, k === 'hurdle' ? inkOf(QUALS[0].col) : k === 'beam' ? inkOf(QUALS[1].col) : k === 'hill' ? inkOf(QUALS[2].col) : INK));
+      const q = CUPS[i], k = i === next ? 1 + 0.012 * Math.sin(time * 4) : 1, x0 = -w / 2, y0 = -h / 2, rad = h * 0.22;
+      g.save(); g.translate(nd.x, nd.y); g.scale(k, k); g.lineJoin = g.lineCap = 'round';
+      g.fillStyle = 'rgba(43,45,66,0.18)'; g.beginPath(); g.roundRect(x0 + 4, y0 + 9, w - 8, h, rad); g.fill();
+      // the place it is run in, and a pale track along the bottom
+      const card = new Path2D(); card.roundRect(x0, y0, w, h, rad);
+      g.save(); g.clip(card);
+      const th = pick.thumbs[q.place], dh = Math.max(h, (w * th.height) / th.width); g.drawImage(th, x0, y0 + h - dh * 0.9, w, dh);
+      g.fillStyle = 'rgba(255,253,248,0.55)'; g.fillRect(x0, y0 + h * 0.7, w, h * 0.2);
+      g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 2; for (const yy of [0.7, 0.9]) { g.beginPath(); g.moveTo(x0, y0 + h * yy); g.lineTo(x0 + w, y0 + h * yy); g.stroke(); }
+      g.restore();
+      // the course itself: the start, each thing in its order, the finish
+      const list = ['start', ...q.course.filter((t) => t !== 'dash'), 'flag'], xa = x0 + Math.max(h * 0.66, 74), xb = x0 + w - h * 0.2, ts = Math.min(h * 0.36, (xb - xa) / (list.length - 1) / 1.18), by = y0 + h * 0.84;
+      list.forEach((t, j) => drawCupThing(g, t, lerp(xa, xb, j / (list.length - 1)) + (t === 'start' || t === 'flag' ? ts * 0.1 : 0), by + (t === 'pond' ? ts * 0.14 : 0), t === 'pond' ? ts * 0.66 : ts, { lw: 0.075 }));
+      g.strokeStyle = '#FFFDF8'; g.lineWidth = Math.max(4, h * 0.06); g.stroke(card);
+      g.strokeStyle = INK; g.lineWidth = Math.max(2, h * 0.02); g.beginPath(); g.roundRect(x0 - h * 0.035, y0 - h * 0.035, w + h * 0.07, h * 1.07, rad * 1.1); g.stroke();
       // the cup it has won here, or the space where one will go
-      const tx = pick.wide ? r * 0.92 : r * 1.9, ty = pick.wide ? -r * 0.8 : -r * 0.4, tr = r * 0.42;
+      const tr = h * 0.17, tx = x0 + w - h * 0.3, ty = y0 + h * 0.28;
+      g.fillStyle = 'rgba(255,253,248,0.85)'; g.beginPath(); g.arc(tx, ty, tr * 1.4, 0, TAU); g.fill();
       if (G.cups[i]) drawTrophy(g, tx, ty, tr, G.cups[i]);
-      else { g.save(); g.globalAlpha = 0.35; drawTrophy(g, tx, ty, tr, 2); g.restore(); }
+      else { g.save(); g.globalAlpha = 0.3; drawTrophy(g, tx, ty, tr, 2); g.restore(); }
       g.restore();
     });
-    // the doodling waits by the next cup worth going for
-    const nd = pick.nodes[next], ms = R * 0.5, mx = nd.x - R * 1.0, my = nd.y + R * 0.95 - Math.abs(Math.sin(time * 3.2)) * ms * 0.22;
+    // the doodling waits at the start of the next cup worth going for
+    const nd = pick.nodes[next], ms = Math.min(h * 0.24, 36), mx = nd.x - w / 2 + Math.max(h * 0.3, 36), fy = nd.y + h * 0.36, my = fy - Math.abs(Math.sin(time * 3.2)) * ms * 0.22;
     c.face(App.dt); c.q = Math.sin(time * 6.4) * 0.05; c.pose(mx, 0, ms); c.pose(mx, my - c.bounds.maxY, ms);
-    g.fillStyle = 'rgba(43,45,66,0.2)'; g.beginPath(); g.ellipse(mx, nd.y + R * 0.97, ms * 0.8, ms * 0.17, 0, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(43,45,66,0.2)'; g.beginPath(); g.ellipse(mx, fy + ms * 0.04, ms * 0.8, ms * 0.17, 0, 0, TAU); g.fill();
     c.draw(g);
-    if (!G.cups.some(Boolean)) { const u = (time % 2.2) / 2.2, press = u > 0.3 && u < 0.6 ? 1 : 0; drawTouchDot(g, nd.x + R * 0.2, nd.y + R * 0.25 - (press ? 0 : 16), press ? 0.7 : 0, u < 0.1 ? u * 10 : u > 0.85 ? (1 - u) / 0.15 : 1); }
+    if (!G.cups.some(Boolean) && idle > 2) { const u = (time % 2.2) / 2.2, press = u > 0.3 && u < 0.6 ? 1 : 0; drawTouchDot(g, nd.x + w * 0.1, nd.y + h * 0.1 - (press ? 0 : 16), press ? 0.7 : 0, u < 0.1 ? u * 10 : u > 0.85 ? (1 - u) / 0.15 : 1); }
   }
 
-  // ----- the line-up -----
+  // ----- the line-up: look along the course, lay the lunchbox out -----
   function lineUp(i) {
-    cupI = i; cup = CUPS[i]; phase = 'line'; pack = -1; replay = false; res = null; rt = 0; medal = -1; knocked = {}; ate = false; time = 0;
+    cupI = i; cup = CUPS[i]; phase = 'line'; replay = false; res = null; rt = 0; medal = -1; frozen = {}; melt = {}; seen = {}; time = 0; idle = 0;
     const [lo, hi] = cup.rivals;
     racers = crowd.slice(0, 3).map((rd) => {
       const r = rng((rd.seed || 1) + i * 7), own = rd.guest || App.list.includes(rd);   // a visitor or a shelf-mate brings what it has grown; a fair friend is as good as this cup needs
       return { c: new Critter(rd), d: rd, lv: own ? Grow.levels(rd).map((v) => clamp(v, lo, hi)) : [0, 1, 2].map(() => lo + Math.floor(r() * (hi - lo + 1))) };
     });
     racers.push({ c, d, lv: Grow.levels(d), mine: true });
-    racers.forEach((R, lane) => { R.lane = lane; R.seg = -1; R.done = false; });
+    racers.forEach((R, lane) => { R.lane = lane; R.seg = -1; R.done = false; R.sec = undefined; });
     layout();
+    plates = secs.filter((s) => s.k in CUP_THING).map((s) => ({ si: s.i, k: s.k, q: CUP_THING[s.k], x: s.x0 + CUP_PLATE, on: false, eaten: false, pop: 0 }));
     for (const R of racers) {
       const k = R.c;
       k.fx = {}; k.sc = k.scT = 1; k.grab = k.kin = null; k.alive = true; k.asleep = false; k.mood = 'idle'; k.mouthHold = 0; k.qT = 0; k.vx = k.vy = k.av = 0; k.ang = 0; k.lookAt = null;
@@ -8141,7 +8409,7 @@ const Cup = (() => {
       k.baseS = rs * laneK(R.lane); k.refreshParts();
       k.x = laneX(-0.55, R.lane); k.y = laneY(R.lane) - k.ub.y1 * k.baseS;
     }
-    cam = camTarget(); fxp.clear();
+    zoom = zoomOut(); pan = 0; scroll = 0; cam = camMax(); fxp.clear();          // begin at the far end and come back along the course
     Sound.setVoice({ size: 0.5, seed: d.seed, style: d.voice }); Sound.voice('question'); c.say(0.3);
     syncBar();
   }
@@ -8152,7 +8420,7 @@ const Cup = (() => {
     F = H < 560 ? H - 112 : clamp(H * 0.5 + trackH * 0.56, 120 + trackH, H - 156);
     X0 = Math.max(S * 2.4, W * 0.24);
     P = clamp(Math.min(W / 8.8, H * (H < 560 ? 0.115 : 0.085)), 32, 84); PF = H < 560 ? H * 0.5 : H * 0.56;
-    let x = 0; secs = cup.course.map((k) => { const s = { k, x0: x, x1: x + SEC_LEN[k] }; x = s.x1; return s; });
+    let x = 0; secs = cup.course.map((k, i) => { const s = { k, i, x0: x, x1: x + SEC_LEN[k] }; x = s.x1; return s; });
     L = X0 + x * unit + Math.max(S * 5, W * 0.45);
     const dpr = App.dpr;
     backdrop = ['sky', 'land'].map((part) => {
@@ -8163,22 +8431,40 @@ const Cup = (() => {
     });
     amb = Places.life(cup.place, W, H, F - gap * 3 - S * 0.7, S * 1.5, d.seed);
   }
+  const plateAt = (p) => [laneX(p.x, 3), laneY(3) + gap * 0.12];
+  // a snack goes onto a plate, or comes back off it
+  function setPlate(p, on) {
+    if (on && packed() >= CUP_BOX) { wiggle(boxEl); Sound.sfx('error'); return false; }     // the lunchbox is empty: take one back first
+    p.on = on; p.pop = 1; idle = 0;
+    Sound.sfx(on ? 'pick' : 'undo', { pitch: p.q * 3 });
+    if (on) { const [x, y] = plateAt(p); fxp.emit('ring', x, y - S * 0.3, { size: S * 0.9, life: 0.35, color: QUALS[p.q].col }); c.setMood('happy', 0.8); c.qv += 1.5; }
+    syncBar(); return true;
+  }
+  // the snack buttons: the next empty plate that wants this snack gets it, and the view goes there
+  function packSnack(q) {
+    const p = plates.find((x) => x.q === q && !x.on);
+    pan = 99;
+    if (!p) { const last = plates.filter((x) => x.q === q && x.on).pop(); if (last) setPlate(last, false); return; }
+    if (setPlate(p, true)) { const x = laneX(p.x, 3), w = App.W / zoom; if (x < scroll + w * 0.12 || x > scroll + w * 0.88) scroll = clamp(x - w * 0.42, 0, camMax()); }
+  }
   const camTarget = () => {
     const W = App.W, M = mine();
-    if (phase === 'line' || phase === 'count') return 0;
-    return clamp(laneX(M.x || 0, 3) - W * 0.36, 0, Math.max(0, L - W));
+    if (phase === 'line') return scroll;
+    if (phase === 'count') return 0;
+    return clamp(laneX(M.x || 0, 3) - (W / zoom) * 0.36, 0, camMax());
   };
 
   function go() {
     if (phase !== 'line') return;
-    phase = 'count'; lights = 0; seed = ((Date.now() & 0xffffff) ^ d.seed) >>> 0;
+    phase = 'count'; lights = 0; pan = 99; seed = ((Date.now() & 0xffffff) ^ d.seed) >>> 0;
     Sound.sfx('page'); syncBar();
   }
   function startRace() {
-    const field = racers.map((R) => ({ lv: R.mine && pack >= 0 ? R.lv.map((v, q) => v + (q === pack ? 1 : 0)) : R.lv }));
-    res = simulate(cup, field, seed);
-    phase = 'race'; rt = 0; knocked = {}; podT = 0;
-    racers.forEach((R) => { R.seg = -1; R.done = false; R.x = 0; });
+    const help = plates.filter((p) => p.on).map((p) => p.si);
+    res = simulate(cup, racers.map((R) => ({ lv: R.lv, help: R.mine ? help : [] })), seed);
+    phase = 'race'; rt = 0; frozen = {}; melt = {}; seen = {}; podT = 0;
+    plates.forEach((p) => { p.eaten = false; });
+    racers.forEach((R) => { R.seg = -1; R.done = false; R.x = 0; R.sec = undefined; });
     Sound.music.onBeat = null; Sound.music.start({ seed: d.seed + cupI * 5, theme: PLACE_TUNE[cup.place] });
     syncBar();
   }
@@ -8191,28 +8477,33 @@ const Cup = (() => {
     const s = segs[i], u = clamp01((t - s.t0) / (s.t1 - s.t0));
     return { i, kind: s.kind, x: lerp(s.x0, s.x1, u), u, sec: s.sec };
   }
-  function ground(x, lane, kind) {                          // how high the ground is under a racer, in pixels
-    for (const s of secs) {
-      if (x < s.x0 || x > s.x1) continue;
-      if (s.k === 'hill') return Math.sin(((x - s.x0) / 5) * Math.PI) ** 1.4 * S * 0.95;
-      if (s.k === 'beam' && (kind === 'beam' || kind === 'wobble') && x > s.x0 + 0.4 && x < s.x1 - 0.4) return S * 0.4;
-    }
+  function ground(x, lane, kind) {                          // how high the ground is under a racer, in pixels: the log over a pond
+    for (const s of secs) if (s.k === 'pond' && x > s.x0 + 1.0 && x < s.x1 - 0.4 && (kind === 'beam' || kind === 'wobble')) return S * 0.4;
     return 0;
   }
   function drive(dt) {
     for (const R of racers) {
-      const k = R.c, p = at(R, rt), feet = k.ub.y1 * k.baseS, me = R.mine, gy = laneY(R.lane);
+      const k = R.c, p = at(R, rt), feet = k.ub.y1 * k.baseS, me = R.mine, gy = laneY(R.lane), key = p.sec + '.' + R.lane;
       let lift = ground(p.x, R.lane, p.kind), bob = 0, a = 0;
+      const sx = laneX(p.x, R.lane), vol = me ? 1 : 0.35;
+      if (me) {
+        // a snack waiting on a plate is gobbled on the way past; and each thing, once behind it, is marked with how it went
+        for (const pl of plates) if (pl.on && !pl.eaten && p.x >= pl.x) { pl.eaten = true; pl.pop = 1; Sound.setVoice({ size: 0.5, seed: d.seed, style: d.voice }); Sound.voice('munch'); k.say(0.3); k.qv += 2; const [px, py] = plateAt(pl); fxp.burst('star', px, py - S * 0.3, 8, { speed: S * 4, size: 11, life: 0.6, colors: ['#fff', QUALS[pl.q].col], drag: 3 }); }
+        const now = p.kind === 'done' ? secs.length : p.sec;
+        if (now !== undefined && now !== R.sec) { const e = R.sec !== undefined && res.lanes[R.lane].story.find((q) => q.i === R.sec && q.sec !== 'finish'); if (e) { seen[R.sec] = { ok: e.ok, fed: e.fed, t: rt }; Sound.sfx(e.ok === 2 ? 'sparkle' : 'tap', { gain: 0.5 }); } R.sec = now; }
+      }
       if (p.i !== R.seg) {                                   // something new has just begun
         R.seg = p.i;
-        const sx = laneX(p.x, R.lane), vol = me ? 1 : 0.35;
         if (me) Sound.setVoice({ size: 0.5, seed: d.seed, style: d.voice });
         if (p.kind === 'jump') { Sound.sfx('hop', { gain: 0.7 * vol }); if (me) { Sound.voice('whee'); k.say(0.3); } k.setMood('happy', 0.8); }
+        if (p.kind === 'boing') { Sound.sfx('boing', { gain: vol }); Sound.voice('whee'); k.say(0.4); k.setMood('happy', 1.2); k.qv -= 3; fxp.emit('ring', sx, gy, { size: S * 1.2, life: 0.4, color: QUALS[0].col }); }
         if (p.kind === 'clip') { Sound.sfx('hop', { gain: 0.5 * vol }); }
-        if (p.kind === 'tumble') { knocked[p.sec + '.' + R.lane] = rt; Sound.sfx('thud', { gain: 0.6 * vol }); if (me) { Sound.voice('oof'); k.say(0.3); } k.setMood('dizzy', 1.2); fxp.burst('puff', sx, gy, 5, { angle: -Math.PI / 2, spread: 1.2, speed: 160, size: S * 0.2, life: 0.5, color: 'rgba(255,255,255,0.8)', drag: 3 }); }
+        if (p.kind === 'tumble') { Sound.sfx('thud', { gain: 0.6 * vol }); if (me) { Sound.voice('oof'); k.say(0.3); } k.setMood('dizzy', 1.2); fxp.burst('puff', sx, gy, 5, { angle: -Math.PI / 2, spread: 1.2, speed: 160, size: S * 0.2, life: 0.5, color: 'rgba(255,255,255,0.8)', drag: 3 }); }
         if (p.kind === 'wobble') { k.setMood('wide', 1.5); if (me) { Sound.voice('question'); k.say(0.3); } }
+        if (p.kind === 'slide') { frozen[key] = rt; Sound.sfx('freeze', { gain: vol }); Sound.voice('whee'); k.say(0.4); k.setMood('happy', 1.6); }
         if (p.kind === 'splash') { Sound.sfx('drop', { gain: vol }); if (me) Sound.voice('brr'); k.setMood('wide', 1.4); fxp.burst('dot', sx, gy + rs * 0.2, 14, { angle: -Math.PI / 2, spread: 1.2, speed: 380, size: 6, life: 0.7, color: '#BEE8FF', g: 1400 }); }
-        if (p.kind === 'climb' && me && R.lv[2] < 2) { k.setMood('wide', 1.5); }
+        if (p.kind === 'melt') { k.setMood(me && R.lv[2] < 2 ? 'wide' : 'think', 1.5); }
+        if (p.kind === 'blaze') { Sound.sfx('fire', { gain: 0.5 * vol }); k.setMood('happy', 1.2); }
         if (p.kind === 'sprint' && me) { Sound.voice('whee'); k.say(0.3); k.setMood('happy', 2); }
         if (p.kind === 'done' && !R.done) {
           R.done = true; R.place = racers.filter((q) => q.done).length;
@@ -8227,16 +8518,23 @@ const Cup = (() => {
       if (p.kind === 'run') bob = hop(1.1, 0.5);
       if (p.kind === 'sprint') { bob = hop(1.5, 0.4); a = 0.14; }
       if (p.kind === 'jump') { bob = Math.sin(p.u * Math.PI) * S * 1.05; a = Math.sin(p.u * TAU) * -0.12; }
-      if (p.kind === 'clip') { bob = Math.sin(p.u * Math.PI) * S * 0.62; a = p.u * 1.3; }
+      if (p.kind === 'boing') { bob = Math.sin(p.u * Math.PI) * S * 1.9; a = p.u * TAU; k.qT = Math.sin(p.u * Math.PI) * 0.2; }      // a jelly bounce: high, and all the way round
+      if (p.kind === 'clip') { bob = Math.sin(p.u * Math.PI) * S * 0.72; a = p.u * 1.3; }
       if (p.kind === 'tumble') { a = 1.3 + ease.inOut(p.u) * (TAU - 1.3); bob = Math.sin(p.u * Math.PI) * rs * 0.4; }
       if (p.kind === 'beam') bob = hop(2.2, 0.12);
       if (p.kind === 'wobble') { a = Math.sin(rt * 9 + R.lane) * 0.34; bob = hop(2.2, 0.08); }
+      if (p.kind === 'slide') { a = 0.42; k.qT = -0.14; if (Math.random() < dt * 22) fxp.emit('dot', sx - rs * 0.8, gy - rs * 0.1, { size: 4, life: 0.45, color: '#FFFFFF', vx: -S * 2, vy: -S * rand(0.4, 1.4), g: 500 }); }
       if (p.kind === 'splash') { const dn = p.u < 0.3 ? p.u / 0.3 : p.u > 0.7 ? (1 - p.u) / 0.3 : 1; lift = lerp(S * 0.4, -rs * 0.9, ease.inOut(dn)); a = dn * 0.5; }
-      if (p.kind === 'climb') bob = hop(1.3, 0.26);
-      if (p.kind === 'down') { bob = hop(0.9, 0.55); a = 0.1; }
+      if (p.kind === 'melt') {                               // stopped at the ice, puffing at it
+        melt[key] = p.u; a = 0.16 + Math.sin(rt * 9) * 0.05; k.qT = Math.sin(rt * 9) * 0.07;
+        if (Math.random() < dt * 7) fxp.emit('puff', sx + rs * 0.9, gy - rs * 0.9, { size: rs * rand(0.3, 0.5), life: 0.5, color: 'rgba(255,141,132,0.85)', vx: S * 1.6, vy: -S * rand(0, 0.5), drag: 3 });
+      } else if (p.kind === 'blaze') {
+        melt[key] = clamp01(p.u * 2.6); bob = hop(1.5, 0.3); a = 0.14;
+        if (Math.random() < dt * 40) fxp.emit('flame', sx + rs * rand(0.8, 1.6), gy - rs * rand(0.5, 1.2), { size: rs * rand(0.35, 0.6), life: 0.4, vx: S * 3, vy: -S * rand(0, 1) });
+      } else if (melt[key] !== undefined) melt[key] = 1;
       if (p.kind === 'done') bob = Math.abs(Math.sin(rt * 6 + R.lane)) * rs * (R.place <= 3 ? 0.7 : 0.25) * Math.min(1, p.u);
       R.x = p.x; R.kind = p.kind;
-      k.kin = { x: laneX(p.x, R.lane), y: gy - lift - bob - feet, a };
+      k.kin = { x: sx, y: gy - lift - bob - feet, a };
       k.lookAt = p.kind === 'done' ? null : { x: k.x + S * 4, y: k.y };
       k.step(dt, env);
     }
@@ -8278,6 +8576,18 @@ const Cup = (() => {
     }
     if (medal > 0 && Math.random() < dt * 4) fxp.burst('confetti', rand(W), -10, 5, { angle: Math.PI / 2, spread: 0.6, speed: 200, size: 11, life: 3, colors: PALETTE.slice(0, 9), g: 300, drag: 0.6 });
   }
+  // how one thing went: a star, a wobble or a cross; or the snack that saw to it
+  function drawOutcome(g, e, x, y, r) {
+    g.save(); g.lineCap = g.lineJoin = 'round';
+    if (e.fed) { g.fillStyle = '#FFFDF8'; g.strokeStyle = QUALS[e.q === undefined ? 0 : e.q].col; g.lineWidth = Math.max(2, r * 0.2); g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); g.stroke(); snack(g, CUP_PACK[e.q], x, y, r * 0.74); g.restore(); return; }
+    g.fillStyle = e.ok === 2 ? '#FFC928' : e.ok === 1 ? '#FFFDF8' : '#D8D4CC'; g.strokeStyle = INK; g.lineWidth = Math.max(1.5, r * 0.19);
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); g.stroke();
+    g.fillStyle = '#fff'; g.lineWidth = Math.max(1.5, r * 0.24); g.beginPath();
+    if (e.ok === 2) { for (let i = 0; i < 10; i++) { const a = (i / 10) * TAU - Math.PI / 2, rr = i % 2 ? r * 0.28 : r * 0.62; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } g.closePath(); g.fill(); g.lineWidth = Math.max(1, r * 0.14); g.stroke(); }
+    else if (e.ok === 1) { g.moveTo(x - r * 0.5, y); g.quadraticCurveTo(x - r * 0.25, y - r * 0.5, x, y); g.quadraticCurveTo(x + r * 0.25, y + r * 0.5, x + r * 0.5, y); g.stroke(); }
+    else { g.moveTo(x - r * 0.36, y - r * 0.36); g.lineTo(x + r * 0.36, y + r * 0.36); g.moveTo(x + r * 0.36, y - r * 0.36); g.lineTo(x - r * 0.36, y + r * 0.36); g.stroke(); }
+    g.restore();
+  }
   function drawPodium(g) {
     const W = App.W, S = P, F = PF, cx = W / 2 - S * 0.85, w = S * 1.6;
     g.save(); g.lineJoin = 'round';
@@ -8301,32 +8611,26 @@ const Cup = (() => {
       if (u > 0) drawTrophy(g, gx + S * 0.62, F - ph * S - S * 0.3 - (1 - ease.back(u)) * S * 2, S * (R.mine ? 0.36 : 0.28) * Math.min(1, u * 2), m);
       drawNameTag(g, R.d.name, k.x, Math.min(k.bounds.minY - S * 0.42, F - ph * S - S * 2.0), clamp(S * 0.28, 11, 17), clamp01(podT - 0.8));
     }
-    // how its race went, one thing at a time: the thing, the ability that mattered, and how it did
+    // how its race went, one thing at a time: the thing itself, and how it did there
     const story = res.lanes[M.lane].story, ts = clamp(Math.min(S * 0.5, (W - 30) / (story.length * 2.6 + 0.6)), 13, 34), sy = Math.min(App.H - 112 - ts, F + S * 0.9 + ts * 1.5), sx = W / 2 - ((story.length - 1) * ts * 2.6) / 2;
     story.forEach((e, j) => {
       const u = clamp01((podT - 2 - j * 0.3) / 0.3);
       if (u <= 0) return;
-      const x = sx + j * ts * 2.6, k = ease.back(u), col = QUALS[e.q].col;
+      const x = sx + j * ts * 2.6, k = ease.back(u), col = QUALS[e.q].col, t = e.sec === 'finish' ? 'flag' : e.sec;
       g.save(); g.translate(x, sy); g.scale(k, k);
       g.fillStyle = '#FFFDF8'; g.strokeStyle = col; g.lineWidth = ts * 0.2; g.beginPath(); g.arc(0, 0, ts, 0, TAU); g.fill(); g.stroke();
-      glyph(g, e.sec === 'finish' ? 'flag' : e.sec, 0, ts * 0.05, ts * 0.52, inkOf(col));
-      drawQual(g, e.q, -ts * 0.78, -ts * 0.78, ts * 0.36);
-      const bx = ts * 0.74, by = ts * 0.74, br = ts * 0.42;
-      g.fillStyle = e.ok === 2 ? '#FFC928' : e.ok === 1 ? '#FFFDF8' : '#D8D4CC'; g.strokeStyle = INK; g.lineWidth = Math.max(1.5, ts * 0.08);
-      g.beginPath(); g.arc(bx, by, br, 0, TAU); g.fill(); g.stroke();
-      g.strokeStyle = INK; g.fillStyle = '#fff'; g.lineWidth = Math.max(1.5, br * 0.24); g.lineCap = g.lineJoin = 'round'; g.beginPath();
-      if (e.ok === 2) { for (let i = 0; i < 10; i++) { const a = (i / 10) * TAU - Math.PI / 2, rr = i % 2 ? br * 0.28 : br * 0.62; g.lineTo(bx + Math.cos(a) * rr, by + Math.sin(a) * rr); } g.closePath(); g.fill(); g.lineWidth = Math.max(1, br * 0.14); g.stroke(); }
-      else if (e.ok === 1) { g.moveTo(bx - br * 0.5, by); g.quadraticCurveTo(bx - br * 0.25, by - br * 0.5, bx, by); g.quadraticCurveTo(bx + br * 0.25, by + br * 0.5, bx + br * 0.5, by); g.stroke(); }
-      else { g.moveTo(bx - br * 0.36, by - br * 0.36); g.lineTo(bx + br * 0.36, by + br * 0.36); g.moveTo(bx + br * 0.36, by - br * 0.36); g.lineTo(bx - br * 0.36, by + br * 0.36); g.stroke(); }
+      drawCupThing(g, t, t === 'flag' ? ts * 0.02 : 0, t === 'pond' ? ts * 0.32 : ts * 0.56, t === 'pond' ? ts * 0.84 : ts * 1.02, { lw: 0.08 });
+      drawOutcome(g, e, ts * 0.74, ts * 0.74, ts * 0.44);
       g.restore();
     });
   }
 
   // ----- frame -----
   function step(dt) {
-    time += dt;
+    time += dt; idle += dt;
     if (phase === 'pick') return;
-    amb.step(dt, { x: mine().c.x - cam, y: mine().c.y, S });
+    for (const p of plates) p.pop = Math.max(0, p.pop - dt * 3);
+    amb.step(dt, { x: (mine().c.x - cam) * zoom, y: mine().c.y, S });
     if (phase === 'line' || phase === 'count') {
       for (const R of racers) {
         const k = R.c, feet = k.ub.y1 * k.baseS;
@@ -8337,11 +8641,6 @@ const Cup = (() => {
       if (phase === 'count') {
         const was = Math.floor(lights / 0.62); lights += dt; const now = Math.floor(lights / 0.62);
         if (now !== was && now <= 3) Sound.sing(now < 3 ? 2 : 7);
-        if (pack >= 0 && !ate && lights > 0.3) {              // the packed snack goes down just before the off
-          ate = true; const m = c.mouthPos(), col = QUALS[pack].col;
-          Sound.setVoice({ size: 0.5, seed: d.seed, style: d.voice }); Sound.voice('munch'); c.say(0.4); c.qv += 2;
-          fxp.burst('star', c.x, c.y, 10, { speed: S * 4, size: 12, life: 0.7, colors: ['#fff', col], drag: 3 }); fxp.emit('ring', m[0], m[1], { size: S * 1.6, life: 0.45, color: col });
-        }
         if (lights >= 0.62 * 3) startRace();
       }
     } else if (phase === 'race') {
@@ -8350,9 +8649,14 @@ const Cup = (() => {
       const M = mine(), slowest = Math.max(...res.lanes.map((l) => l.time));
       if (rt > Math.min(slowest, res.lanes[M.lane].time + 4) + 1.5) toPodium();
     } else if (phase === 'podium') podium(dt);
-    cam = phase === 'podium' ? 0 : damp(cam, camTarget(), 5, dt);
+    zoom = phase === 'line' ? zoomOut() : phase === 'podium' ? 1 : damp(zoom, 1, 4, dt);             // closer for the off
+    // the view: first a look back along the whole course from the far end, then wherever the child drags it, then the race
+    if (phase === 'line' && pan < PAN) { pan += dt; cam = lerp(camMax(), 0, ease.inOut(clamp01((pan - 0.5) / (PAN - 0.6)))); scroll = cam; }
+    else cam = phase === 'podium' ? 0 : damp(cam, camTarget(), phase === 'line' && ptr ? 40 : 5, dt);
   }
 
+  // a point on one of the five lines that divide the lanes, x along the course
+  const edge = (x, j) => [laneX(x, 0) + S * 0.42 * 0.72 - S * 0.42 * j, laneY(0) - gap * 0.72 + gap * j];
   function drawTrack(g) {
     const lw = Math.max(2.5, S * 0.05), y0 = laneY(0) - gap * 0.72, y1 = laneY(3) + gap * 0.28, sk = S * 0.42 * 4, xa = laneX(-1.8, 0) + S * 0.42 * 0.72, xb = laneX(secs[secs.length - 1].x1 + 3.6, 0) + S * 0.42 * 0.72;
     g.save(); g.lineCap = g.lineJoin = 'round';
@@ -8373,13 +8677,21 @@ const Cup = (() => {
       if (fin) { const bw = S * 1.5, bh = S * 0.9; g.strokeStyle = INK; g.lineWidth = lw; g.fillStyle = '#fff'; g.beginPath(); g.rect(xt, top, bw, bh); g.fill(); g.fillStyle = INK; for (let i = 0; i < 5; i++) for (let j = 0; j < 3; j++) if ((i + j) % 2) g.fillRect(xt + (i * bw) / 5, top + (j * bh) / 3, bw / 5, bh / 3); g.beginPath(); g.rect(xt, top, bw, bh); g.stroke(); }
       else { g.fillStyle = '#FFC928'; g.strokeStyle = INK; g.lineWidth = lw; g.beginPath(); g.moveTo(xt, top); g.quadraticCurveTo(xt + S * 0.7, top + S * 0.05 + Math.sin(time * 3) * 3, xt + S * 1.3, top + S * 0.38); g.quadraticCurveTo(xt + S * 0.7, top + S * 0.55, xt, top + S * 0.74); g.closePath(); g.fill(); g.stroke(); }
     }
-    // water under every beam
-    for (const s of secs) if (s.k === 'beam') {
-      const xa2 = laneX(s.x0 + 0.5, 0) + S * 0.42 * 0.72, xb2 = laneX(s.x1 - 0.5, 0) + S * 0.42 * 0.72;
-      g.fillStyle = cup.place === 'night' ? '#2B6CB8' : '#6CC6EE'; g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 3;
-      g.beginPath(); g.moveTo(xa2, y0 + 2); g.lineTo(xb2, y0 + 2); g.lineTo(xb2 - sk, y1 - 2); g.lineTo(xa2 - sk, y1 - 2); g.closePath(); g.fill(); g.stroke();
+    // every pond: water right across the track, and ice over any lane where an ice pop has been eaten
+    for (const s of secs) if (s.k === 'pond') {
+      const a = s.x0 + 1.1, b = s.x1 - 0.5, [ax, ay] = edge(a, 0), [bx] = edge(b, 0), [cx, cy] = edge(b, 4), [dx] = edge(a, 4);
+      g.fillStyle = cup.place === 'night' ? '#2B6CB8' : '#59C3F0'; g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(ax, ay + 2); g.lineTo(bx, ay + 2); g.lineTo(cx, cy - 2); g.lineTo(dx, cy - 2); g.closePath(); g.fill(); g.stroke();
       g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 2;
-      for (let i = 0; i < 7; i++) { const y = lerp(y0, y1, (i + 0.5) / 7), x = lerp(xa2, xb2 - S * 0.5, ((i * 0.37 + time * 0.05) % 1)) - sk * ((i + 0.5) / 7); g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + S * 0.2, y - 4, x + S * 0.4, y); g.stroke(); }
+      for (let i = 0; i < 7; i++) { const y = lerp(y0, y1, (i + 0.5) / 7), x = lerp(ax, bx - S * 0.5, ((i * 0.37 + time * 0.05) % 1)) - sk * ((i + 0.5) / 7); g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + S * 0.2, y - 4, x + S * 0.4, y); g.stroke(); }
+      for (let lane = 0; lane < 4; lane++) {
+        const ft = frozen[s.i + '.' + lane]; if (ft === undefined) continue;
+        const u = ease.out(clamp01((rt - ft) / 0.45)), e = lerp(a, b, u), p0 = edge(a, lane), p1 = edge(e, lane), p2 = edge(e, lane + 1), p3 = edge(a, lane + 1);
+        g.fillStyle = 'rgba(236,249,255,0.96)'; g.strokeStyle = 'rgba(120,190,230,0.9)'; g.lineWidth = 2.5;
+        g.beginPath(); g.moveTo(p0[0], p0[1] + 3); g.lineTo(p1[0], p1[1] + 3); g.lineTo(p2[0], p2[1] - 3); g.lineTo(p3[0], p3[1] - 3); g.closePath(); g.fill(); g.stroke();
+        g.strokeStyle = 'rgba(120,190,230,0.7)'; g.lineWidth = 2;
+        for (let i = 0; i < 5; i++) { const xx = lerp(a + 0.3, b - 0.5, (i * 0.23 + 0.1) % 1); if (xx > e - 0.3) continue; const [gx, gyy] = edge(xx, lane + 0.3 + (i % 3) * 0.2); g.beginPath(); g.moveTo(gx, gyy); g.lineTo(gx + S * 0.3, gyy - 4); g.stroke(); }
+      }
     }
     g.restore();
   }
@@ -8387,32 +8699,79 @@ const Cup = (() => {
   function drawLane(g, i) {
     const y = laneY(i), k = laneK(i), lw = Math.max(2.5, S * 0.05) * k;
     g.save(); g.lineCap = g.lineJoin = 'round';
-    secs.forEach((s, si) => {
-      if (s.k === 'hill') {
-        const xa = laneX(s.x0, i), xb = laneX(s.x1, i), h = S * 0.95, col = cup.place === 'snow' ? '#EAF4FF' : cup.place === 'night' ? '#5B6FB5' : '#7CCB6A';
-        g.fillStyle = col; g.strokeStyle = inkOf(col); g.lineWidth = lw;
-        g.beginPath(); g.moveTo(xa, y + 2);
-        for (let u = 0; u <= 1.001; u += 0.05) g.lineTo(lerp(xa, xb, u), y - Math.sin(u * Math.PI) ** 1.4 * h);
-        g.lineTo(xb, y + 2); g.closePath(); g.fill(); g.stroke();
-      } else if (s.k === 'hurdle') {
-        const x = laneX(s.x0 + 1.7, i), h = S * 0.6 * k, w = S * 0.4 * k, kt = knocked[si + '.' + i], fall = kt === undefined ? 0 : clamp01((rt - kt) / 0.3);
-        g.strokeStyle = INK; g.lineWidth = lw * 1.5;
-        for (const dx of [-w, w]) { g.beginPath(); g.moveTo(x + dx * 0.9, y); g.lineTo(x + dx * 0.9, y - h); g.stroke(); }
-        g.strokeStyle = '#FFFDF8'; g.lineWidth = lw * 0.6;
-        for (const dx of [-w, w]) { g.beginPath(); g.moveTo(x + dx * 0.9, y); g.lineTo(x + dx * 0.9, y - h); g.stroke(); }
-        g.save(); g.translate(x + fall * S * 0.5, y - h + fall * h * 0.9); g.rotate(fall * 0.5);
-        g.strokeStyle = INK; g.lineWidth = lw * 2.4; g.beginPath(); g.moveTo(-w * 1.15, 0); g.lineTo(w * 1.15, 0); g.stroke();
-        g.strokeStyle = '#FF5A4E'; g.lineWidth = lw * 1.4; g.stroke();
-        g.strokeStyle = '#fff'; g.lineWidth = lw * 1.4; g.setLineDash([w * 0.4, w * 0.5]); g.lineCap = 'butt'; g.beginPath(); g.moveTo(-w * 0.9, 0); g.lineTo(w * 1.0, 0); g.stroke();
-        g.restore();
-      } else if (s.k === 'beam') {
-        const xa = laneX(s.x0 + 0.4, i), xb = laneX(s.x1 - 0.4, i), top = y - S * 0.4;
+    for (const s of secs) {
+      if (s.k === 'wall') drawCupThing(g, 'wall', laneX(s.x0 + 2.1, i), y + S * 0.02, S * 0.95 * k, { lw: lw / (S * 0.95 * k) });
+      else if (s.k === 'ice') drawCupThing(g, 'ice', laneX(s.x0 + 1.95, i), y + S * 0.02, S * 1.1 * k, { melt: melt[s.i + '.' + i] || 0, lw: lw / (S * 1.1 * k) });
+      else if (s.k === 'pond' && frozen[s.i + '.' + i] === undefined) {       // the log across the water (a frozen lane has no need of one)
+        const xa = laneX(s.x0 + 1.0, i), xb = laneX(s.x1 - 0.4, i), top = y - S * 0.4;
         g.fillStyle = '#8A5A44'; g.strokeStyle = inkOf('#8A5A44'); g.lineWidth = lw;
         for (const x of [xa + S * 0.2, xb - S * 0.2]) { g.beginPath(); g.roundRect(x - S * 0.12, top + S * 0.1, S * 0.24, S * 0.36, S * 0.06); g.fill(); g.stroke(); }
         g.fillStyle = '#B9825E'; g.beginPath(); g.roundRect(xa, top, xb - xa, S * 0.22 * k, S * 0.1); g.fill(); g.stroke();
         g.strokeStyle = 'rgba(255,255,255,0.4)'; g.lineWidth = lw * 0.6; g.beginPath(); g.moveTo(xa + S * 0.2, top + S * 0.07); g.lineTo(xb - S * 0.3, top + S * 0.07); g.stroke();
       }
-    });
+    }
+    g.restore();
+  }
+  // the plates in the child's own lane. During the race the snack sits on its plate until it is gobbled.
+  function drawPlates(g) {
+    const pr = S * 0.34;
+    for (const p of plates) {
+      const [x, y] = plateAt(p), k = 1 + Math.sin(p.pop * Math.PI) * 0.25;
+      g.fillStyle = 'rgba(30,25,60,0.16)'; g.beginPath(); g.ellipse(x, y + pr * 0.14, pr * 1.05, pr * 0.3, 0, 0, TAU); g.fill();
+      g.fillStyle = '#FFFDF8'; g.strokeStyle = INK; g.lineWidth = Math.max(2, S * 0.04); g.beginPath(); g.ellipse(x, y, pr, pr * 0.3, 0, 0, TAU); g.fill(); g.stroke();
+      g.strokeStyle = 'rgba(43,45,66,0.2)'; g.lineWidth = 2; g.beginPath(); g.ellipse(x, y - pr * 0.02, pr * 0.62, pr * 0.16, 0, 0, TAU); g.stroke();
+      if (p.on && !p.eaten && phase !== 'line') snack(g, CUP_PACK[p.q], x, y - pr * 0.72 - Math.abs(Math.sin(time * 3 + p.si)) * pr * 0.12, pr * 0.74 * k);
+    }
+  }
+  // Before the off, each plate carries a bubble the same size on any screen: the snack that fits, faint until it is laid there.
+  const BUB = 19;
+  const bubbleAt = (p) => { const [x, y] = plateAt(p), [sx, sy] = scr(x, y); return [sx, sy - BUB * 1.5]; };
+  function drawBubbles(g) {
+    const full = packed() >= CUP_BOX;
+    for (const p of plates) {
+      const [x, y] = bubbleAt(p), col = QUALS[p.q].col, k = 1 + Math.sin(p.pop * Math.PI) * 0.22, r = BUB * k;
+      g.save(); g.lineJoin = g.lineCap = 'round';
+      g.fillStyle = '#FFFDF8'; g.beginPath(); g.moveTo(x - r * 0.3, y + r * 0.8); g.lineTo(x, y + BUB * 1.45); g.lineTo(x + r * 0.3, y + r * 0.8); g.fill();
+      g.fillStyle = p.on ? '#FFFDF8' : 'rgba(255,253,248,0.82)'; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+      g.strokeStyle = p.on ? col : rgba(col, full ? 0.35 : 0.95); g.lineWidth = p.on ? 4 : 3;
+      if (!p.on) { g.setLineDash([6, 6]); g.lineDashOffset = -time * 10; }
+      g.beginPath(); g.arc(x, y, r, 0, TAU); g.stroke(); g.setLineDash([]);
+      snack(g, CUP_PACK[p.q], x, y, r * 0.68, p.on ? 1 : full ? 0.2 : 0.4 + 0.12 * Math.sin(time * 4 + p.si));
+      g.restore();
+    }
+  }
+  // a small sign over each thing: the ability it asks for and how much of it this doodling has; then, once passed, how it went
+  function drawSigns(g) {
+    const lv = mine().lv, r = clamp(S * 0.3, 13, 20);
+    for (const s of secs) {
+      if (!(s.k in CUP_THING)) continue;
+      const q = CUP_THING[s.k], col = QUALS[q].col, pl = plates.find((p) => p.si === s.i), sn = seen[s.i];
+      const [x, base] = scr(laneX(s.x0 + (s.k === 'pond' ? 3.1 : 2.0), 0) + S * 0.3, laneY(0) - gap * 0.72), y = base - r * 2.3;
+      g.strokeStyle = 'rgba(43,45,66,0.35)'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x, y + r); g.lineTo(x, base - r * 0.1); g.stroke();
+      g.fillStyle = '#FFFDF8'; g.strokeStyle = col; g.lineWidth = Math.max(2.5, r * 0.18); g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); g.stroke();
+      drawQual(g, q, x, y, r * 0.62);
+      const pr = r * 0.2, pg = pr * 2.5, py = y + r * 1.42;
+      g.fillStyle = 'rgba(255,253,248,0.92)'; g.beginPath(); g.roundRect(x - pg * 2 - pr * 1.8, py - pr * 1.7, pg * 4 + pr * 3.6, pr * 3.4, pr * 1.7); g.fill();
+      drawPips(g, x - pg * 2, py, lv[q], col, pr, pg);
+      if (sn) { const u = clamp01((rt - sn.t) / 0.3); drawOutcome(g, { ...sn, q }, x + r * 0.85, y - r * 0.7, r * 0.62 * ease.back(u)); }
+      else if (pl && pl.on && phase !== 'line') drawOutcome(g, { fed: true, q }, x + r * 0.85, y - r * 0.7, r * 0.62);
+    }
+  }
+  // the whole course in one line: every thing on it, where the racers are, and (before the off) which part is on the screen
+  function drawStrip(g) {
+    const W = App.W, x0 = W * 0.12, x1 = W * 0.86, y = App.H < 520 ? 86 : 100, total = secs[secs.length - 1].x1, at = (x) => lerp(x0, x1, clamp01(x / total));
+    g.save(); g.lineCap = 'round';
+    g.strokeStyle = 'rgba(255,253,248,0.92)'; g.lineWidth = 22; g.beginPath(); g.moveTo(x0 - 4, y); g.lineTo(x1 + 10, y); g.stroke();
+    g.strokeStyle = 'rgba(43,45,66,0.22)'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke();
+    if (phase === 'line') {                                  // the part being looked at
+      const a = at((cam - X0) / unit), b = at((cam + W / zoom - X0) / unit);
+      g.strokeStyle = 'rgba(255,201,40,0.75)'; g.lineWidth = 22; g.beginPath(); g.moveTo(Math.max(x0, a), y); g.lineTo(Math.max(x0 + 1, b), y); g.stroke();
+    }
+    for (const s of secs) if (s.k in CUP_THING) drawCupThing(g, s.k, at((s.x0 + s.x1) / 2), y + (s.k === 'pond' ? 6 : 8), s.k === 'pond' ? 11 : 16, { lw: 0.12 });
+    drawCupThing(g, 'flag', x1 + 14, y + 9, 16, { lw: 0.12 });
+    if (phase === 'race') for (const R of racers.slice().sort((a, b) => (a.mine ? 1 : 0) - (b.mine ? 1 : 0))) {
+      g.fillStyle = R.d.color; g.strokeStyle = R.mine ? INK : inkOf(R.d.color); g.lineWidth = R.mine ? 3 : 2; g.beginPath(); g.arc(at(R.x || 0), y, R.mine ? 9 : 6.5, 0, TAU); g.fill(); g.stroke();
+    }
     g.restore();
   }
 
@@ -8430,60 +8789,65 @@ const Cup = (() => {
       drawPodium(g); fxp.draw(g, true); fxp.draw(g, false); amb.front(g);
       return;
     }
-    g.save(); g.translate(-cam, 0);
+    g.save(); g.translate(0, F); g.scale(zoom, zoom); g.translate(-cam, -F);
     drawTrack(g);
     fxp.draw(g, true);
     for (let i = 0; i < 4; i++) {
       drawLane(g, i);
+      if (i === 3) drawPlates(g);
       const R = racers[i], k = R.c;
       if (R.kind !== 'splash') { g.fillStyle = 'rgba(30,25,60,0.16)'; g.beginPath(); g.ellipse(k.x, laneY(i) - ground(R.x || 0, i, R.kind) + S * 0.03, k.baseS * 0.8, k.baseS * 0.14, 0, 0, TAU); g.fill(); }
       k.draw(g);
     }
     fxp.draw(g, false);
-    if (phase === 'line' || phase === 'count') {
-      // names: beside each racer, on the empty track ahead of it (the child's own goes underneath, where there is room)
-      const ns = clamp(S * 0.26, 11, 16);
-      for (const R of racers) { if (R.mine) drawNameTag(g, R.d.name, R.c.x, laneY(3) + ns * 1.5, ns); else drawNameTag(g, R.d.name, R.c.x + rs * 1.7 + ((R.d.name || '').length * 0.3 + 0.55) * ns, R.c.y, ns); }
-      const M = mine().c;
-      if (pack >= 0 && !ate) {                                // a thought of the snack it has packed
-        const bx = M.x + rs * 2.5, by = M.y - rs * 0.5, br = S * 0.42;
-        g.fillStyle = '#fff'; g.strokeStyle = INK; g.lineWidth = 2.5;
-        for (const [dx, dy, r] of [[-1.0, 0.3, 0.1], [-0.75, 0.16, 0.15]]) { g.beginPath(); g.arc(bx + dx * br * 1.6, by + dy * br * 1.6, r * br * 1.6, 0, TAU); g.fill(); g.stroke(); }
-        g.strokeStyle = QUALS[pack].col; g.lineWidth = 4; g.beginPath(); g.arc(bx, by, br, 0, TAU); g.fill(); g.stroke();
-        g.save(); g.translate(bx, by); g.scale(br * 0.66, br * 0.66); Snacks[CUP_PACK[pack]](g, { t: time, lw: 3 / (br * 0.66) }); g.restore();
-      }
-    }
     g.restore();
+    // over the top, the same size on any screen: the signs, the bubbles on the plates, the names
+    drawSigns(g);
+    if (phase === 'line') drawBubbles(g);
+    if (phase === 'line' || phase === 'count') {
+      const ns = clamp(S * 0.26, 11, 15), a = phase === 'count' ? clamp01(1 - lights) : 1;
+      for (const R of racers) { const [x, y] = scr(R.c.x, R.mine ? laneY(3) + gap * 0.28 : R.c.y); if (R.mine) drawNameTag(g, R.d.name, x, y + ns * 1.2, ns, a); else drawNameTag(g, R.d.name, x + (rs * 1.5 * zoom) + ((R.d.name || '').length * 0.3 + 0.55) * ns, y, ns, a); }
+    }
     amb.front(g);
+    drawStrip(g);
     if (phase === 'count') {                                  // three lamps: red, amber, green
-      const n = Math.floor(lights / 0.62), r = clamp(W / 26, 13, 22), cx = W / 2, cy = Math.max(112, laneY(0) - gap - S * 2.6);
+      const n = Math.floor(lights / 0.62), r = clamp(W / 26, 13, 22), cx = W / 2, cy = Math.max(150, laneY(0) - gap - S * 2.6);
       g.fillStyle = INK; g.beginPath(); g.roundRect(cx - r * 4.1, cy - r * 1.5, r * 8.2, r * 3, r * 1.5); g.fill();
       ['#FF5A4E', '#FFC928', '#5BD66B'].forEach((col, i) => { const on = n >= i; g.fillStyle = on ? col : 'rgba(255,255,255,0.14)'; if (on) { g.shadowColor = col; g.shadowBlur = 16; } g.beginPath(); g.arc(cx + (i - 1) * r * 2.6, cy, r, 0, TAU); g.fill(); g.shadowBlur = 0; });
     }
-    if (phase === 'race') {                                   // who is where, at a glance
-      const x0 = W * 0.14, x1 = W * 0.86, y = 92;
-      g.strokeStyle = 'rgba(255,253,248,0.9)'; g.lineWidth = 12; g.lineCap = 'round'; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke();
-      g.strokeStyle = 'rgba(43,45,66,0.25)'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke();
-      glyph(g, 'flag', x1 + 12, y - 4, 10);
-      for (const R of racers.slice().sort((a, b) => (a.mine ? 1 : 0) - (b.mine ? 1 : 0))) {
-        const x = lerp(x0, x1, clamp01((R.x || 0) / res.length));
-        g.fillStyle = R.d.color; g.strokeStyle = R.mine ? INK : inkOf(R.d.color); g.lineWidth = R.mine ? 3 : 2; g.beginPath(); g.arc(x, y, R.mine ? 9 : 6.5, 0, TAU); g.fill(); g.stroke();
-      }
+    // how to: a finger lays the first snack; once that is known, a finger drags the course along
+    if (phase === 'line' && pan >= PAN && !ptr && idle > 3 && !Grow.of(d).cups.some(Boolean)) {
+      const u = (time % 2.4) / 2.4, a = u < 0.1 ? u * 10 : u > 0.85 ? (1 - u) / 0.15 : 1, p = plates.find((q) => !q.on);
+      if (!packed() && p) { const [px, py] = bubbleAt(p), press = u > 0.3 && u < 0.6 ? 1 : 0; drawTouchDot(g, px + 16, py + 26 - (press ? 0 : 14), press ? 0.7 : 0, a); }
+      else if (camMax() > 40 && cam < 20) drawTouchDot(g, lerp(W * 0.72, W * 0.36, ease.inOut(clamp01((u - 0.15) / 0.55))), F + gap * 0.9, 0.6, a);
     }
   }
 
-  function down(p) { ptr = { x: p.x, y: p.y, moved: 0 }; }
-  function move(p) { if (ptr) { ptr.moved += Math.abs(p.x - ptr.x) + Math.abs(p.y - ptr.y); ptr.x = p.x; ptr.y = p.y; } }
+  function down(p) {
+    ptr = { x: p.x, y: p.y, moved: 0 }; idle = 0;
+    if (phase === 'line' && pan < PAN) { pan = 99; scroll = cam; }           // a touch ends the look along the course
+  }
+  function move(p) {
+    if (!ptr) return;
+    const dx = p.x - ptr.x;
+    ptr.moved += Math.abs(dx) + Math.abs(p.y - ptr.y); ptr.x = p.x; ptr.y = p.y;
+    if (phase === 'line' && ptr.moved > 8) { scroll = clamp(scroll - dx / zoom, 0, camMax()); idle = 0; }      // drag the course along to see what is ahead
+  }
   function up(p) {
     const t = ptr; ptr = null;
     if (!t || t.moved > 14) return;
-    if (phase === 'pick') { const R = pick.R, nd = pick.nodes.find((n) => hypot(p.x - n.x, p.y - n.y) < R * 1.3); if (nd) { Sound.sfx('page'); lineUp(nd.i); } return; }
-    for (const R of racers) if (R.c.hit(p.x + (phase === 'podium' ? 0 : cam), p.y)) { R.c.poke(p.x + (phase === 'podium' ? 0 : cam), p.y); R.c.qv += 2; Sound.setVoice({ size: 0.46, seed: R.d.seed, style: R.d.voice }); Sound.voice('boop', { pitch: rand(0, 4) }); R.c.say(0.14); return; }
+    if (phase === 'pick') { const nd = pick.nodes.find((n) => Math.abs(p.x - n.x) < pick.w / 2 && Math.abs(p.y - n.y) < pick.h / 2 + 6); if (nd) { Sound.sfx('page'); lineUp(nd.i); } return; }
+    if (phase === 'line') {
+      const pl = plates.find((q) => { const [x, y] = bubbleAt(q); return hypot(p.x - x, p.y - (y + BUB * 0.5)) < BUB * 1.9; });
+      if (pl) { setPlate(pl, !pl.on); return; }
+    }
+    const [wx, wy] = phase === 'podium' ? [p.x, p.y] : world(p);
+    for (const R of racers) if (R.c.hit(wx, wy)) { R.c.poke(wx, wy); R.c.qv += 2; Sound.setVoice({ size: 0.46, seed: R.d.seed, style: R.d.voice }); Sound.voice('boop', { pitch: rand(0, 4) }); R.c.say(0.14); return; }
   }
   function resize() {
     if (!c) return;
     if (phase === 'pick') { layoutPick(); return; }
-    layout();
+    layout(); scroll = clamp(scroll, 0, camMax());
     for (const R of racers) { R.c.baseS = phase === 'podium' ? P * 0.8 : rs * laneK(R.lane); R.c.refreshParts(); }
   }
   // leaving half way through a race: the music stops with it
@@ -8491,7 +8855,9 @@ const Cup = (() => {
 
   return { build, open, stop, step, draw, down, move, up, resize, simulate, lineUp,
     get phase() { return phase; },
-    peek: () => ({ phase, cup: cupI, pack, rt, medal, replay, nodes: pick.nodes.map((n) => ({ x: n.x, y: n.y })), order: res ? res.order.slice() : null, times: res ? res.lanes.map((l) => +l.time.toFixed(3)) : null, story: res && racers.length ? res.lanes[racers.length - 1].story : null, lv: racers.map((R) => R.lv) }) };
+    peek: () => ({ phase, cup: cupI, rt, medal, replay, cam, camMax: camMax(), panning: phase === 'line' && pan < PAN, box: CUP_BOX - packed(),
+      nodes: pick.nodes.map((n) => ({ x: n.x, y: n.y })), plates: plates.map((p) => { const [x, y] = bubbleAt(p); return { si: p.si, k: p.k, q: p.q, on: p.on, eaten: p.eaten, x, y }; }), zoom,
+      order: res ? res.order.slice() : null, times: res ? res.lanes.map((l) => +l.time.toFixed(3)) : null, story: res && racers.length ? res.lanes[racers.length - 1].story : null, lv: racers.map((R) => R.lv) }) };
 })();
 
 // ===== fair.js =====
@@ -9289,7 +9655,7 @@ window.__doodArt = {
 
 // the drawing internals, for contact sheets (tools/look.mjs)
 window.__doodKit = { App, Places, PARTS, PART_TRAYS, PLACE_LIST, QUESTS, PONDS, VOICE_LIST, TUNE_LIST, drawPartThumb, makeDemo, Critter, worldTheme, PALETTE,
-  Shape, Snacks, newCreatureData, partTint, shade, inkOf, Grow, GrowHud, Codec, Cup, Shoot, Fair, LOOKS, PRIZES, CUPS, QUALS, SHOOT };
+  Shape, Snacks, newCreatureData, partTint, shade, inkOf, Grow, GrowHud, Codec, Cup, Shoot, Fair, LOOKS, PRIZES, CUPS, QUALS, SHOOT, ShootRules };
 
 })();
 </script>
