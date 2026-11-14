@@ -316,6 +316,29 @@ input.tag.pulse { animation: pulse 1.5s ease-in-out infinite; box-shadow: 0 0 0 
   .thumb.prize { width: 58px; height: 58px; } .thumb.prize canvas { transform: scale(.82); }
 }
 
+/* ----- the room: its tray of things, and the colour dots, always there (dim when the chosen thing takes no colour) ----- */
+.drawer { flex-direction: column; align-items: center; gap: 8px; }
+.panel.things { grid-auto-flow: column; gap: 6px; align-items: center; }
+.panel.things .row.things { display: flex; justify-content: flex-start; gap: 6px; padding: 7px; margin: -7px -7px -7px 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; max-width: calc(100vw - 150px); }
+.panel.things .row.things::-webkit-scrollbar { display: none; }
+.panel.thingcols { grid-template-columns: repeat(12, auto); gap: 8px; justify-items: center; }
+.panel.thingcols .swatch { background: var(--c, transparent); }
+.panel.thingcols .swatch.dim { opacity: .35; transform: none; box-shadow: none; }
+.thumb.scene.glow { animation: glow 1.4s ease-in-out infinite; }
+.thumb.thing.wall.on { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--ink); }
+@media (max-width: 520px) {
+  .panel.things .row.things { gap: 4px; max-width: calc(100vw - 132px); } .panel.things .thumb.thing { width: 46px; height: 46px; } .panel.things .thumb.thing canvas { transform: scale(.78); }
+  .panel.thingcols { grid-template-columns: repeat(6, auto); }     /* two even rows of six, as on the making screen */
+  .panel.places { grid-template-columns: repeat(3, auto) !important; }   /* nine places: three rows of three */
+}
+@media (max-height: 520px) and (min-width: 600px) {   /* sideways the floor is just above the dock: the things stand at the side, the dots in one row above the dock */
+  .drawer .panel.things { position: absolute; right: 10px; bottom: 50px; padding: 7px; grid-auto-flow: row; justify-items: start; }
+  .panel.things .row.things { display: grid; grid-template-columns: repeat(3, 44px); gap: 4px; max-width: none; overflow: visible; margin: 0; padding: 0; }
+  .panel.things .thumb.thing { width: 44px; height: 44px; }
+  .panel.things .thumb.thing canvas { transform: scale(.74); }
+  .panel.thingcols { padding: 6px 10px; }
+}
+
 </style>
 </head>
 <body>
@@ -932,6 +955,7 @@ const ICONS = {
   next: _svg('<path d="M5 12h14M13 6l6 6-6 6"/>', 'stroke-width="2.800"'),
   back: _svg('<path d="M19 12H5M11 6l-6 6 6 6"/>', 'stroke-width="2.800"'),
   check: _svg('<path d="M5 12.500 10 17.500 19.500 7"/>', 'stroke-width="3"'),
+  armchair: _svg('<path d="M6 11V8.5a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3V11"/><path d="M4 12.5a2 2 0 0 1 4 0V14h8v-1.5a2 2 0 0 1 4 0V17H4z"/><path d="M6 17v2M18 17v2"/>'),
   close: _svg('<path d="M6 6l12 12M18 6 6 18"/>', 'stroke-width="2.800"'),
   plus: _svg('<path d="M12 5v14M5 12h14"/>', 'stroke-width="3"'),
   undo: _svg('<path d="M8.500 7 4 11.500 8.500 16"/><path d="M4 11.500h10.500a4.500 4.500 0 0 1 0 9H11"/>'),
@@ -3301,6 +3325,7 @@ function cleanCreature(d) {
   d.pals = (Array.isArray(d.pals) ? d.pals : []).filter((s) => typeof s === 'string' && s.length < 40).slice(0, 3);
   d.tricks = (Array.isArray(d.tricks) ? d.tricks : []).filter((t) => t && nums(t.p) && t.p.length >= 6 && t.p.length % 3 === 0).slice(0, 4);
   Grow.clean(d);
+  Room.clean(d);
   return d;
 }
 
@@ -5363,7 +5388,9 @@ const Places = (() => {
   };
 
   // ----- the life: what keeps moving. back() draws behind the doodling, front() in front of it -----
+  const lives = {};                                        // the lives of places added from outside (the room)
   function life(k, W, H, floor, S, seed) {
+    if (lives[k]) return lives[k](W, H, floor, S, seed);
     const r = rng(seed + 7), top = floor - S * 0.3, L = { k, list: [], t: 0, step() {}, back() {}, front() {} };
     const many = (n, f) => { for (let i = 0; i < n; i++) L.list.push(f(i)); };
     if (k === 'meadow') {
@@ -5488,8 +5515,805 @@ const Places = (() => {
     return cv;
   }
 
-  return { paint: (k, ...a) => { if (a[7] === 'frame' && k !== 'stage') return; (paint[k] || paint.meadow)(...a); }, life, feel: (k) => feel[k] || feel.meadow, thumb, has: (k) => !!paint[k] };
+  // another file can teach Places a place of its own: its painting, its life and its feel (the room does, in src/room.js)
+  function add(k, def) { paint[k] = def.paint; lives[k] = def.life; feel[k] = def.feel; }
+  return { paint: (k, ...a) => { if (a[7] === 'frame' && k !== 'stage') return; (paint[k] || paint.meadow)(...a); }, life, feel: (k) => feel[k] || feel.meadow, thumb, has: (k) => !!paint[k], add };
 })();
+
+// ===== room.js =====
+// ---------- The room: the doodling's own place. The child arranges it, it stays as she left it, and the doodling lives in it ----------
+// It is a ninth place (Places learns it below), drawn behind and in front of the doodlings by its "life".
+// The things in it are drawn in src/things/, one file each, around (0, 0) in body-radii like a part.
+// Brief and reasons: ideas/a-room-of-its-own/BRIEF.md.
+
+const ROOM_THINGS = {};                                    // filled by src/things/*.js
+const ROOM_ORDER = ['window', 'bed', 'rug', 'lamp', 'shelf', 'picture'];   // the order of the tray
+const ROOM = {
+  scale: 0.62,          // doodlings in the room are drawn at this share of their outdoor size, so one does not dwarf the bed
+  max: 12,              // things in one room: at this many the tray wiggles
+  wallDrop: 1.15,       // the wall meets the floor this many body-radii above the line the doodlings stand on
+  floorBack: 0.18,      // things on the floor stand this far behind the doodlings' line, so a doodling stands in front of them
+  topClear: 86,         // pixels kept clear for the top buttons when the screen gives no other limit
+  edge: 12,             // pixels of air kept between a thing and the screen's side
+  markRoom: 16,         // a wall thing is kept this far below that limit, so its cross and handle can always be touched
+  bedSlots: [-0.27, 0.13], // where on a bed a first sleeper (head on the pillow) and a second lie, as a share of the bed's width from its middle
+  sizeMin: 0.55, sizeMax: 1.8,
+  dimOutside: { night: 0.9, space: 1 },      // how far into night the room goes when the window looks out on these (0 day, 1 deepest)
+  nightBlue: [58, 74, 178],                   // night multiplies the room by this blue, so colours stay rich and the lamp has dark to push against
+  starter: () => ({ scene: 'meadow', things: [
+    { k: 'window', x: 0.28, y: 0.42, s: 1, c: PALETTE[7], on: false },
+    { k: 'rug', x: 0.5, y: 1, s: 1, c: PALETTE[3], on: false },
+    { k: 'bed', x: 0.68, y: 1, s: 1, c: PALETTE[5], on: false },
+  ] }),
+};
+
+const Room = (() => {
+  let ctx = null;                                          // the home screen that has it open: { d, c, pals, env, fx, arranging, keep }
+  let sel = -1, drag = null, tap = null, sleepers = [], views = {}, photos = {}, dim = 0, winFade = null, t = 0, leaving = [], squeeze = 0;
+  const pops = new WeakMap();                              // how long ago each thing landed or was touched, for its small bounce (never saved)
+  const WALL = -2;                                         // sel: the wall itself is chosen, to be coloured
+
+  const of = (d) => (d.room && Array.isArray(d.room.things) ? d.room : (d.room = ROOM.starter()));
+  const ok = (k) => !!ROOM_THINGS[k];
+
+  // Saved data comes from outside: keep only what makes sense. A doodling saved before the room opens with the starter room.
+  function clean(d) {
+    const r = d.room && typeof d.room === 'object' ? d.room : null;
+    if (!r) { delete d.room; return; }
+    const num = (v, lo, hi, dflt) => (Number.isFinite(v) ? clamp(v, lo, hi) : dflt);
+    const things = (Array.isArray(r.things) ? r.things : []).filter((o) => o && typeof o.k === 'string' && ok(o.k)).slice(0, ROOM.max)
+      .map((o) => ({ k: o.k, x: num(o.x, 0, 1, 0.5), y: num(o.y, 0, 1, 0.5), s: num(o.s, ROOM.sizeMin, ROOM.sizeMax, 1), c: typeof o.c === 'string' && /^#[0-9a-f]{6}$/i.test(o.c) ? o.c : null, on: !!o.on }));
+    const hex = (c) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
+    d.room = { scene: PLACE_LIST.includes(r.scene) ? r.scene : 'meadow', things };
+    if (hex(r.wall)) d.room.wall = r.wall;
+  }
+
+  // ----- where things are on this screen. A place is kept as a share of the wall or the floor, so the same room fits any size -----
+  // top: the lowest point of the buttons and the name tag (nothing of the room goes under them).
+  // xw: the width the room may use: sideways, while the tray stands at the right, the things are laid out to its left
+  function geo(W, H, floor, s, top = ROOM.topClear, xw = W) {
+    const wallBottom = floor - s * ROOM.wallDrop;
+    return { W, H, floor, s, wallBottom, wallTop: top, standY: floor - s * ROOM.floorBack, xw };
+  }
+  const G = () => { const g0 = ctx.G(); return { ...g0, xw: g0.W - squeeze }; };
+  // The most a thing can be on this screen (pixels to a body-radius): a wall thing fits the wall between the name tag and
+  // the skirting, a floor thing fits between the standing line and the name tag, and either fits the width with air beside it.
+  // What is saved (o.s) never changes for this: the same room is full size on a bigger screen.
+  function fitU(k, G) {
+    const T = ROOM_THINGS[k], xw = G.xw || G.W;
+    const tall = T.at === 'wall' ? G.wallBottom - (G.wallTop + ROOM.markRoom) - 6 : T.at === 'flat' ? 1e9 : G.standY - G.wallTop - 6;
+    return Math.max(4, Math.min(tall / T.h, (xw - 2 * ROOM.edge) / (T.w * 1.12)));
+  }
+  function box(o, G) {                                     // a thing's anchor and size in pixels
+    const T = ROOM_THINGS[o.k], u = Math.min(G.s * o.s, fitU(o.k, G)), hw = (T.w * u) / 2, hh = (T.h * u) / 2, xw = G.xw || G.W;
+    const pad = ROOM.edge + hw * 0.06;                     // posts and knobs reach a little past a thing's stated width
+    const x = clamp(o.x, 0, 1) * xw, cx = clamp(x, hw + pad, Math.max(hw + pad, xw - hw - pad));
+    if (T.at === 'wall') {
+      const lo = G.wallTop + hh + ROOM.markRoom, hi = Math.max(lo, G.wallBottom - hh);
+      const cy = lerp(lo, hi, clamp01(o.y));
+      return { ax: cx, ay: cy, cx, cy, hw, hh, u };
+    }
+    if (T.at === 'flat') { const ay = G.standY + u * 0.05; return { ax: cx, ay, cx, cy: ay, hw, hh, u }; }
+    return { ax: cx, ay: G.standY, cx, cy: G.standY - hh, hw, hh, u };
+  }
+
+  // ----- drawing -----
+  // the wall, the floor and the skirting: everything that does not move
+  function paint(g, W, H, floor, s, theme, seed, d) {
+    const R = d || (ctx && ctx.d) ? of(d || ctx.d) : null;
+    ROOM_PAINT.paint(g, geo(W, H, floor, s), wallOf(R), seed);
+  }
+
+  // the wall in the colour she chose, softened, so the things on it still stand out
+  const wallOf = (R) => (R && R.wall ? shade(R.wall, 0.62) : ROOM_PAINT.wallColour);
+
+  // the place outside the window, painted once per place and kept
+  function view(scene) {
+    if (!views[scene]) views[scene] = Places.thumb(scene, 160, worldTheme(PALETTE[2]));
+    return views[scene];
+  }
+  // A place seen through the glass: its middle, where its sky and ground are, never a cut piece of something at its edge
+  // (the night's tent sits at its left).
+  function putView(g, im, x, y, w, h, a = 1) {
+    const sc = Math.max(w / (im.width * 0.5), h / (im.height * 0.95));
+    g.save(); g.globalAlpha = a; g.beginPath(); g.rect(x, y, w, h); g.clip();
+    g.drawImage(im, x + w / 2 - im.width * 0.62 * sc, y + (h - im.height * sc) * 0.6, im.width * sc, im.height * sc); g.restore();
+  }
+  function drawView(g, x, y, w, h) {
+    const R = of(ctx.d), cv = view(R.scene), k = winFade ? ease.inOut(clamp01(winFade.t / 0.5)) : 1;
+    if (winFade && k < 1) putView(g, view(winFade.from), x, y, w, h, 1);
+    putView(g, cv, x, y, w, h, k);
+  }
+  // the friends it really has: the other doodlings on the shelf, visitors, and those met on the trail. Never the made-up
+  // three the friends drawer offers when there is nobody yet: with nobody, the picture shows the doodling itself.
+  function friendsOf(d) {
+    const seen = new Set([d.id]);
+    return App.guests.concat(App.list.filter((x) => x.id !== d.id), Quest.met()).filter((x) => x && x.outline && !seen.has(x.id) && seen.add(x.id));
+  }
+  // the friends, small, side by side (drawn once and kept)
+  function photo(d) {
+    const fr0 = friendsOf(d).slice(0, 3), fr = fr0.length ? fr0 : [d], key = fr.map((f) => f.id + f.color).join('|');   // no friends yet: itself
+    if (photos[d.id] && photos[d.id].key === key) return photos[d.id].cv;
+    const w = 180, h = 128, cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#BFE6FA'; g.fillRect(0, 0, w, h); g.fillStyle = '#9BDB7A'; g.fillRect(0, h * 0.7, w, h * 0.3);
+    fr.forEach((pd, i) => {
+      try {
+        const k = new Critter(pd); k.alive = true; k.mood = 'happy'; k.moodT = 9;
+        const S0 = 22, x = w * ((i + 1) / (fr.length + 1));
+        k.pose(x, 0, S0); k.pose(x, h * 0.86 - k.bounds.maxY, S0); k.draw(g);
+      } catch (e) { /* a friend that cannot be drawn is left out */ }
+    });
+    photos[d.id] = { key, cv };
+    return cv;
+  }
+  function drawPhoto(g, x, y, w, h) {
+    const cv = photo(ctx.d);
+    g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip();
+    g.drawImage(cv, x, y, w, h);
+    g.restore();
+  }
+
+  function drawThing(g, o, G, pop = 1) {
+    const T = ROOM_THINGS[o.k], b = box(o, G), col = o.c || PALETTE[5];
+    g.save(); g.translate(b.ax, b.ay); g.scale(b.u * pop, b.u * pop);
+    g.lineJoin = g.lineCap = 'round'; g.lineWidth = 0.09;
+    T.draw(g, { col, on: o.on, t, occupied: sleepers.some((s) => s.o === o), cups: cups(), view: drawView, photo: drawPhoto });
+    g.restore();
+  }
+  const cups = () => Grow.of(ctx.d).cups.filter((m) => m > 0);
+  const popOf = (o) => { const p = pops.get(o); return p !== undefined && p < 0.45 ? 0.4 + 0.6 * ease.back(clamp01(p / 0.45)) : 1; };
+  const bump = (o, from = 0.3) => pops.set(o, from);
+  // A bed someone is asleep in comes in front of the other things on the floor, so nothing stands over a sleeping face
+  // (faces stay in view, a Fixed point); it goes back to its place in the list when they wake.
+  const order = (R) => R.things.map((o, i) => ({ o, i })).sort((a, b) => rank(a.o) + busy(a.o) - (rank(b.o) + busy(b.o)) || a.i - b.i);
+  const busy = (o) => (o.k === 'bed' && sleepers.some((sl) => sl.o === o) ? 0.5 : 0);
+  // wall things, then flat ones, then those standing on the floor; within each, the one last touched is in front (the list's order is saved)
+  const rank = (o) => ({ wall: 0, flat: 1, floor: 2 })[ROOM_THINGS[o.k].at];
+  const toFront = (o) => { const R = of(ctx.d), i = R.things.indexOf(o); if (i >= 0) { R.things.splice(i, 1); R.things.push(o); } return R.things.length - 1; };
+
+  const G0 = () => G();
+  // night: the room multiplied by a deep blue, k from 0 (day) to 1 (deepest)
+  function darken(g, x, y, w, h, k) {
+    const c = ROOM.nightBlue.map((v) => Math.round(lerp(255, v, k)));
+    g.save(); g.globalCompositeOperation = 'multiply'; g.fillStyle = `rgb(${c.join(',')})`; g.fillRect(x, y, w, h); g.restore();
+  }
+  // the room's life, as Places expects: back is drawn behind the doodlings, front over them
+  function life(W, H) {
+    return {
+      k: 'room', list: [], t: 0,
+      step(dt) { stepRoom(dt); },
+      back(g) {
+        if (!ctx) return;
+        const G0 = G(), R = of(ctx.d);
+        for (const o of R.things) if (o.k === 'window') ROOM_PAINT.windowLight(g, G0, box(o, G0), R.scene);
+        for (const { o } of order(R)) drawThing(g, o, G0, popOf(o));
+        for (const l of leaving) { g.save(); g.globalAlpha = 1 - l.t / 0.25; drawThing(g, l.o, G0, 1 - l.t / 0.25 * 0.6); g.restore(); }
+      },
+      // one blanket over everyone in a bed, tucked under the mouth of whatever shape was drawn. The home screen draws
+      // the sleepers, then this, then whoever is awake, so a doodling standing in front of a bed is never under its blanket.
+      blankets(g) {
+        if (!ctx) return;
+        const G = G0();
+        for (const o of new Set(sleepers.map((sl) => sl.o))) {
+          const b = box(o, G), T = ROOM_THINGS.bed, inBed = sleepers.filter((sl) => sl.o === o);
+          const top = Math.min(T.top - 0.03, ...inBed.map((sl) => (sl.k.mouthPos()[1] + sl.k.S * 0.3 - b.ay) / b.u));
+          const left = Math.max(-T.w / 2 + 0.25, Math.min(...inBed.map((sl) => (sl.k.x - sl.k.S * 1.05 - b.ax) / b.u)));
+          g.save(); g.translate(b.ax, b.ay); g.scale(b.u, b.u); g.lineJoin = g.lineCap = 'round'; g.lineWidth = 0.09;
+          T.blanket(g, { col: o.c || PALETTE[5] }, top, left);
+          g.restore();
+        }
+      },
+      front(g) {
+        if (!ctx) return;
+        const G = G0();
+        if (dim > 0.01) {                                  // night or space outside: the room is dim, and a lamp that is on lights it
+          g.save(); darken(g, 0, 0, W, H, dim);
+          g.globalCompositeOperation = 'lighter';
+          for (const o of of(ctx.d).things) if (o.k === 'lamp' && o.on) {
+            const b = box(o, G), [lx, ly] = ROOM_THINGS.lamp.light, x = b.ax + lx * b.u, y = b.ay + (ly + 0.9) * b.u, R = b.u * 4.5;   // from under the shade, so the shade keeps her colour
+            const gr = g.createRadialGradient(x, y, 0, x, y, R); gr.addColorStop(0, `rgba(255,206,120,${0.62 * dim})`); gr.addColorStop(1, 'rgba(255,206,120,0)');
+            g.fillStyle = gr; g.fillRect(x - R, y - R, R * 2, R * 2);
+          }
+          g.restore();
+        }
+        for (const o of of(ctx.d).things) if (o.k === 'lamp' && o.on) {   // the glow of the shade itself, day or night
+          const b = box(o, G), [lx, ly] = ROOM_THINGS.lamp.light, x = b.ax + lx * b.u, y = b.ay + ly * b.u;
+          const gr = g.createRadialGradient(x, y, 0, x, y, b.u * 1.3); gr.addColorStop(0, 'rgba(255,236,170,0.28)'); gr.addColorStop(1, 'rgba(255,236,170,0)');
+          g.fillStyle = gr; g.fillRect(x - b.u * 1.3, y - b.u * 1.3, b.u * 2.6, b.u * 2.6);
+        }
+        if (ctx.arranging() && sel >= 0) drawSel(g, G);
+      },
+    };
+  }
+  function stepRoom(dt) {
+    if (!ctx) return;
+    t += dt;
+    const R = of(ctx.d);
+    for (const o of R.things) { const p = pops.get(o); if (p !== undefined) { if (p > 1) pops.delete(o); else pops.set(o, p + dt); } }
+    squeeze = damp(squeeze, ctx.arranging() ? ctx.reserve() : 0, 9, dt);   // things slide over while the tray stands at the side
+    for (let i = leaving.length - 1; i >= 0; i--) { leaving[i].t += dt; if (leaving[i].t > 0.25) leaving.splice(i, 1); }
+    if (winFade) { winFade.t += dt; if (winFade.t > 0.5) winFade = null; }
+    dim = damp(dim, ROOM.dimOutside[R.scene] || 0, 3, dt);
+    // A tucked-in doodling sleeps until it is touched itself, or food comes (the home screen wakes it then).
+    const G1 = G();
+    for (let i = sleepers.length - 1; i >= 0; i--) {
+      const sl = sleepers[i];
+      if (sl.k.grab) sl.k.asleep = false;                  // picked up: awake
+      if (!sl.k.asleep || !R.things.includes(sl.o)) { sleepers.splice(i, 1); if (!sl.k.grab) sl.k.kin = null; continue; }
+      sl.k.kin = bedSpot(sl, G1);
+      if (sl.k !== ctx.c) {                                // a friend asleep shows the z too (the doodling's own comes from the home screen)
+        sl.z = (sl.z === undefined ? 1.2 : sl.z) - dt;
+        if (sl.z <= 0) { sl.z = 2.6; const f = sl.k.facePos(); ctx.fx.emit('zzz', f[0] + sl.k.S * 0.5, f[1] - sl.k.S * 0.5, { vy: -40, vx: 14, size: 12, life: 2.4, color: INK, vr: 0 }); }
+      }
+    }
+  }
+
+  function bedSpot(sl, G) {
+    const b = box(sl.o, G), T = ROOM_THINGS.bed;
+    return { x: b.ax + ROOM.bedSlots[sl.slot] * T.w * b.u, y: b.ay + T.top * b.u - sl.k.S * 0.85, a: 0 };
+  }
+  // the arranging marks: the making screen's dashed ring, red cross and size handle
+  function knobs(o, G) {
+    const b = box(o, G), R = Math.max(30, Math.max(b.hw, b.hh) * 0.95) + 6, k = Math.SQRT1_2;
+    const on = ([x, y]) => [clamp(x, 20, (G.xw || G.W) - 20), clamp(y, G.wallTop + 18, G.floor)];   // the marks never leave the screen or go under the buttons
+    return { b, R, grow: on([b.cx + R * k, b.cy - R * k]), cross: on([b.cx - R * k, b.cy - R * k]) };
+  }
+  function drawSel(g, G) {
+    const o = of(ctx.d).things[sel]; if (!o) return;
+    const n = knobs(o, G);
+    g.save();
+    g.strokeStyle = 'rgba(43,45,66,0.55)'; g.lineWidth = 2.5; g.setLineDash([7, 8]); g.lineDashOffset = -t * 14;
+    g.beginPath(); g.arc(n.b.cx, n.b.cy, n.R, 0, TAU); g.stroke(); g.setLineDash([]);
+    knob(g, n.grow[0], n.grow[1], '#fff', INK, 'grow');
+    knob(g, n.cross[0], n.cross[1], '#FF5A4E', '#fff', 'x');
+    g.restore();
+  }
+  function knob(g, x, y, bg, fg, kind) {
+    g.fillStyle = 'rgba(43,45,66,0.18)'; g.beginPath(); g.arc(x, y + 2.5, 15, 0, TAU); g.fill();
+    g.fillStyle = bg; g.beginPath(); g.arc(x, y, 15, 0, TAU); g.fill();
+    g.strokeStyle = fg; g.lineWidth = 3; g.lineCap = 'round'; g.beginPath();
+    if (kind === 'x') { g.moveTo(x - 5, y - 5); g.lineTo(x + 5, y + 5); g.moveTo(x + 5, y - 5); g.lineTo(x - 5, y + 5); }
+    else { g.moveTo(x - 5, y + 5); g.lineTo(x + 5, y - 5); g.moveTo(x, y - 5); g.lineTo(x + 5, y - 5); g.lineTo(x + 5, y); g.moveTo(x - 5, y); g.lineTo(x - 5, y + 5); g.lineTo(x, y + 5); }
+    g.stroke();
+  }
+
+  // ----- touching it -----
+  // The thing under a finger, front-most first. A finger is on a thing when it is on what is drawn (give or take a fingertip),
+  // not just inside its box: through the gap beside a lamp's pole, the window behind it is what is touched.
+  const probe = document.createElement('canvas'); probe.width = probe.height = 25;
+  const pg = probe.getContext('2d', { willReadFrequently: true });
+  function onDrawn(o, G, p) {
+    pg.setTransform(1, 0, 0, 1, 0, 0); pg.clearRect(0, 0, 25, 25);
+    pg.translate(12 - p.x, 12 - p.y); drawThing(pg, o, G);
+    const px = pg.getImageData(0, 0, 25, 25).data;
+    for (let i = 3; i < px.length; i += 4) { const q = (i - 3) / 4, dx = (q % 25) - 12, dy = Math.floor(q / 25) - 12; if (px[i] > 40 && dx * dx + dy * dy <= 144) return true; }
+    return false;
+  }
+  function hitThing(p, G) {
+    const list = order(of(ctx.d)).reverse();
+    for (const { o, i } of list) { const b = box(o, G); if (Math.abs(p.x - b.cx) < b.hw + 12 && Math.abs(p.y - b.cy) < b.hh + 12 && onDrawn(o, G, p)) return i; }
+    return -1;
+  }
+  // Before the doodlings: only the marks of the thing being arranged. Returns true if the finger is the room's.
+  function downFirst(p) {
+    if (!ctx || !ctx.arranging() || sel < 0) return false;
+    const G1 = G(), o = of(ctx.d).things[sel]; if (!o) return false;
+    const n = knobs(o, G1);
+    if (hypot(p.x - n.cross[0], p.y - n.cross[1]) < 24) { remove(sel); return true; }
+    if (hypot(p.x - n.grow[0], p.y - n.grow[1]) < 26) { drag = { type: 'size', o, s0: o.s, d0: hypot(p.x - n.b.cx, p.y - n.b.cy) || 1, cx: n.b.cx, cy: n.b.cy }; return true; }
+    return false;
+  }
+  // After the doodlings, friends and the ball: a thing. Returns true if the finger is the room's.
+  function down(p) {
+    if (!ctx) return false;
+    const G1 = G(), i = hitThing(p, G1);
+    if (ctx.arranging()) {
+      if (i < 0) { if (sel !== WALL) sel = -1; syncTray(); return false; }
+      const o = of(ctx.d).things[i], b = box(o, G1);
+      sel = toFront(o);                                    // the thing touched comes in front of its kind
+      drag = { type: 'move', o, ox: p.x - b.ax, oy: p.y - b.ay, moved: 0, x: p.x, y: p.y };
+      bump(o, 0.33); Sound.sfx('pick'); syncTray();
+      return true;
+    }
+    if (i < 0) return false;
+    tap = { i, x: p.x, y: p.y };
+    return true;
+  }
+  function move(p) {
+    if (tap && hypot(p.x - tap.x, p.y - tap.y) > 14) tap = null;
+    if (!drag) return;
+    const G1 = G(), o = drag.o, T = ROOM_THINGS[o.k];
+    if (drag.type === 'size') {
+      o.s = clamp((drag.s0 * hypot(p.x - drag.cx, p.y - drag.cy)) / drag.d0, ROOM.sizeMin, Math.min(ROOM.sizeMax, fitU(o.k, G1) / G1.s));   // the handle stops where the thing fills its space
+      return;
+    }
+    drag.moved += hypot(p.x - drag.x, p.y - drag.y); drag.x = p.x; drag.y = p.y;
+    const b = box(o, G1);
+    o.x = clamp01((p.x - drag.ox) / G1.xw);
+    if (T.at === 'wall') {                                 // a wall thing stays on the wall, below the buttons and the name
+      const lo = G1.wallTop + b.hh + ROOM.markRoom, hi = Math.max(lo + 1, G1.wallBottom - b.hh);
+      o.y = clamp01((p.y - drag.oy - lo) / (hi - lo));
+    }
+  }
+  function up(p) {
+    if (drag) {
+      const o = drag.o, was = drag.type; drag = null;
+      if (was === 'size') { Sound.sfx(o.s > 1 ? 'inflate' : 'deflate', { gain: 0.5 }); }
+      else { Sound.sfx('stick'); bump(o); }
+      ctx.keep(); return true;
+    }
+    if (tap) {
+      const R = of(ctx.d), o = R.things[tap.i]; tap = null;
+      if (!o) return true;
+      if (o.k === 'lamp') { o.on = !o.on; Sound.sfx(o.on ? 'star' : 'tap'); bump(o); ctx.keep(); }
+      else if (o.k === 'window') {                         // the next place outside
+        const i = PLACE_LIST.indexOf(R.scene); winFade = { from: R.scene, t: 0 };
+        R.scene = PLACE_LIST[(i + 1) % PLACE_LIST.length]; Sound.sfx('whoosh', { gain: 0.5 }); Sound.sfx('page'); ctx.keep();
+      } else { bump(o); Sound.sfx('boing', { gain: 0.4 }); }   // anything else gives a little bounce
+      return true;
+    }
+    return false;
+  }
+  // A doodling let go over a bed is tucked in and goes to sleep. Returns true if it was.
+  function dropped(k) {
+    if (!ctx || ctx.arranging()) return false;
+    const G1 = G();
+    for (const o of of(ctx.d).things) {
+      if (o.k !== 'bed') continue;
+      const b = box(o, G1), T = ROOM_THINGS.bed;
+      if (Math.abs(k.x - b.ax) < b.hw * 0.95 && k.y < b.ay + b.u * 0.2 && k.y > b.ay + T.top * b.u - b.u * 3) {
+        const used = sleepers.filter((s) => s.o === o).map((s) => s.slot), slot = [0, 1].find((n) => !used.includes(n));
+        if (slot === undefined) return false;
+        const sl = { k, o, slot }; sleepers.push(sl);
+        k.asleep = true; k.grab = null; k.vx = k.vy = 0; k.kin = bedSpot(sl, G1);
+        Sound.sfx('squish', { gain: 0.4 }); k.qv += 2;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // ----- the tray -----
+  let tray = null, thumbs = [], swatches = [], wallBtn = null, wallG = null;
+  // panel: the things (and the wall, to colour it). cols: the colour dots, always there, dim when the chosen thing takes none
+  function buildTray(panel, cols) {
+    tray = panel;
+    const row = el('div', 'row things', panel);
+    ROOM_ORDER.forEach((k) => {
+      const b = el('button', 'thumb thing', row); b.type = 'button'; b.setAttribute('aria-label', 'Thing ' + k);
+      const [, g] = miniCanvas(58, b); thumbs.push({ k, b, g });
+      b.addEventListener('click', () => { Sound.unlock(); add(k); });
+    });
+    // the wall's square stays at one end; the things scroll beside it, one peeking (more things will come)
+    wallBtn = el('button', 'thumb thing wall', panel); panel.insertBefore(wallBtn, row); wallBtn.type = 'button'; wallBtn.setAttribute('aria-label', 'The wall');
+    [, wallG] = miniCanvas(58, wallBtn);
+    wallBtn.addEventListener('click', () => { Sound.unlock(); if (!ctx) return; sel = sel === WALL ? -1 : WALL; Sound.sfx('tap'); syncTray(); });
+    PALETTE.forEach((col) => {
+      const b = el('button', 'swatch', cols); b.type = 'button'; b.style.background = col; b.setAttribute('aria-label', 'Colour');
+      b.addEventListener('click', () => { Sound.unlock(); recolour(col); });
+      swatches.push({ col, b });
+    });
+  }
+  function drawThumbs() {
+    for (const th of thumbs) {
+      const g = th.g, T = ROOM_THINGS[th.k];
+      g.clearRect(0, 0, 58, 58);
+      const u = Math.min(50 / (T.w * 1), 50 / (T.h * 1)) * 0.92;
+      // a flat thing (the rug) is seen from a little higher in the tray, so it reads as a rug and not a line
+      g.save(); g.translate(29, T.at === 'floor' ? 29 + (T.h * u) / 2 : 29); g.scale(u, T.at === 'flat' ? u * 1.9 : u); g.lineJoin = g.lineCap = 'round'; g.lineWidth = 0.09;
+      const o = { k: th.k, c: null };
+      T.draw(g, { col: th.k === 'rug' ? PALETTE[3] : th.k === 'bed' ? PALETTE[5] : PALETTE[7], on: false, t: 0, occupied: false, cups: ctx ? cups() : [], view: ctx ? drawView : () => {}, photo: ctx ? drawPhoto : () => {} });
+      g.restore();
+    }
+  }
+  function syncTray() {
+    if (!tray || !ctx) return;
+    const R = of(ctx.d), o = R.things[sel], can = sel === WALL || (!!o && ROOM_THINGS[o.k].colour);
+    const now = sel === WALL ? R.wall || ROOM_PAINT.wallColour : o && (o.c || PALETTE[5]);
+    for (const s of swatches) { s.b.classList.toggle('dim', !can); s.b.classList.toggle('on', can && now === s.col); }
+    wallBtn.classList.toggle('on', sel === WALL);
+    // the wall's button is a little square of her wall, with its dots
+    const g = wallG; g.clearRect(0, 0, 58, 58); g.save(); g.beginPath(); g.roundRect(9, 9, 40, 40, 8); g.clip();
+    ROOM_PAINT.paint(g, { W: 58, H: 58, s: 9, floor: 60, wallTop: 0, wallBottom: 49 }, wallOf(R), 1); g.restore();
+    g.strokeStyle = inkOf(wallOf(R)); g.lineWidth = 2.5; g.beginPath(); g.roundRect(9, 9, 40, 40, 8); g.stroke();
+  }
+  function add(k) {
+    if (!ctx) return;
+    const R = of(ctx.d);
+    if (R.things.length >= ROOM.max) { wiggle(tray); Sound.sfx('error'); return; }
+    const T = ROOM_THINGS[k];
+    const o = { k, x: freeX(R, k), y: T.at === 'wall' ? 0.45 : 1, s: 1, c: T.colour ? PALETTE[[7, 5, 3, 2][R.things.length % 4]] : null, on: false };
+    R.things.push(o); sel = R.things.length - 1; bump(o, 0);
+    Sound.sfx('drop', { gain: 0.6 }); Sound.sfx('pick');
+    const b = box(o, G()); ctx.fx.burst('star', b.cx, b.cy, 10, { speed: 260, size: 10, life: 0.6, colors: ['#fff', '#FFC928'], drag: 3 });
+    ctx.keep(); syncTray();
+  }
+  // the spot along the wall or the floor with the most room around it, so a new thing does not land on another
+  // If there is no room left, it is set a little aside from the last of its kind, never exactly on it.
+  function freeX(R, k) {
+    const G1 = G(), at = ROOM_THINGS[k].at, same = R.things.filter((o) => ROOM_THINGS[o.k].at === at);
+    let best = 0.5, room = -1e9;
+    for (let x = 0.08; x <= 0.921; x += 0.02) {
+      const me = box({ k, x, y: 0.45, s: 1 }, G1);
+      const gap = same.length ? Math.min(...same.map((o) => { const b = box(o, G1); return Math.abs(b.cx - me.cx) - b.hw - me.hw; })) : 1e6;
+      const score = Math.min(gap, G1.s * 2) - Math.abs(x - 0.5) * G1.s * 0.5;
+      if (score > room) { room = score; best = x; }
+    }
+    const taken = (x) => same.some((o) => Math.abs(o.x - x) < 0.03);
+    if (taken(best)) { const last = same[same.length - 1]; for (const dx of [0.07, -0.07, 0.14, -0.14, 0.21, -0.21]) if (!taken(clamp01(last.x + dx))) { best = clamp01(last.x + dx); break; } }
+    return best;
+  }
+  function remove(i) {
+    const R = of(ctx.d), o = R.things[i]; if (!o) return;
+    R.things.splice(i, 1); leaving.push({ o, t: 0 }); sel = -1;
+    Sound.sfx('poof', { gain: 0.6 }); ctx.keep(); syncTray();
+  }
+  function recolour(col) {
+    if (!ctx) return;
+    const R = of(ctx.d);
+    if (sel === WALL) { R.wall = col; Sound.sfx('tap'); ctx.repaint(); ctx.keep(); syncTray(); return; }
+    const o = R.things[sel];
+    if (!o || !ROOM_THINGS[o.k].colour) { Sound.sfx('error'); return; }
+    o.c = col; bump(o); Sound.sfx('tap'); ctx.keep(); syncTray();
+  }
+
+  // ----- the small painting of her room, for the places drawer -----
+  function thumb(d, size) {
+    const cv = document.createElement('canvas'), dpr = Math.min(3, window.devicePixelRatio || 1), w = size * 1.5;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(size * dpr);
+    const g = cv.getContext('2d'); g.scale(dpr, dpr);
+    const s = size * 0.2, floor = size * 0.95, Gt = geo(w, size, floor, s, -ROOM.markRoom + 4);
+    paint(g, w, size, floor, s, null, d.seed, d);
+    const was = ctx, sq = squeeze; ctx = { d, G: () => Gt, arranging: () => false, reserve: () => 0 }; squeeze = 0;
+    try { for (const { o } of order(of(d))) drawThing(g, o, Gt); } finally { ctx = was; squeeze = sq; }
+    return cv;
+  }
+
+  // One thing drawn alone, for the lab's sheets: k at (x, y) with u pixels to a body-radius, in a given state.
+  // st: { col, on, scene, cups, friends (true: the shelf's doodlings, false: itself), occupied, sleeper (draw the blanket over a stand-in) }
+  function sample(g, k, x, y, u, st = {}) {
+    const T = ROOM_THINGS[k], d = st.d;
+    const viewAt = (gg, vx, vy, w, h) => putView(gg, view(st.scene || 'meadow'), vx, vy, w, h);
+    const photoAt = (gg, px, py, w, h) => { if (!d) return; const was = ctx; ctx = { d }; try { const cv = photo(d); gg.drawImage(cv, px, py, w, h); } finally { ctx = was; } };
+    g.save(); g.translate(x, y); g.scale(u, u); g.lineJoin = g.lineCap = 'round'; g.lineWidth = 0.09;
+    T.draw(g, { col: st.col || PALETTE[5], on: !!st.on, t: 0, occupied: !!st.sleeper, cups: st.cups || [], view: viewAt, photo: photoAt });
+    if (st.sleeper && k === 'bed') { _pxDot(g, -0.7, T.top - 0.75, 0.75, '#9BDB7A', inkOf('#9BDB7A')); T.blanket(g, { col: st.col || PALETTE[5] }, T.top - 0.35, -1.5); }
+    g.restore();
+  }
+
+  function bind(c) { ctx = c; sel = -1; drag = null; tap = null; sleepers = []; winFade = null; squeeze = 0; dim = ROOM.dimOutside[of(c.d).scene] || 0; drawThumbs(); syncTray(); }
+  function unbind() { if (!ctx) return; for (const s of sleepers) { s.k.kin = null; } sleepers = []; sel = -1; drag = null; tap = null; ctx = null; }
+  function deselect() { sel = -1; drag = null; syncTray(); }
+  const tucked = (k) => sleepers.some((sl) => sl.k === k);
+
+  // the room is the ninth place
+  Places.add('room', { paint: (g, W, H, floor, s, theme, seed) => paint(g, W, H, floor, s, theme, seed), life: (W, H) => life(W, H), feel: { toy: 'ball' } });
+
+  return { darken, sample, geo, of, clean, bind, unbind, deselect, tucked, downFirst, down, move, up, dropped, buildTray, drawThumbs, syncTray, thumb, sleepers: () => sleepers.length, peek: () => ({ sel, things: ctx ? of(ctx.d).things.map((o) => ({ k: o.k, x: o.x, y: o.y, s: o.s, c: o.c, on: o.on })) : [], scene: ctx ? of(ctx.d).scene : null, dim, sleepers: sleepers.length, boxes: ctx ? of(ctx.d).things.map((o) => box(o, G())) : [], wall: ctx ? of(ctx.d).wall || null : null }) };
+})();
+
+// ===== things/_room.js =====
+// The room itself: its wall, skirting and floor, the light the window lays on the floor, and its night.
+// Used by src/room.js. Kept quieter than the doodlings and the things, which stand in front of it.
+// G: where things are on this screen (src/room.js, geo): W, H, floor, s (one body-radius), wallTop, wallBottom.
+const ROOM_PAINT = {
+  wallColour: '#FCE7D2',                                   // the wall when the child has not chosen one
+  boards: '#E8C092',                                       // the floorboards: light honey wood
+  skirting: '#FFF7EA',
+  // the light through the window, by the place outside: [colour, how strong]
+  sun: { meadow: ['#FFEDA8', 0.42], snow: ['#F2F8FF', 0.44], rink: ['#E6F2FF', 0.38], beach: ['#FFE7A6', 0.5],
+    night: ['#C6D8FF', 0.5], space: ['#DCC8FF', 0.32], sea: ['#A8ECF2', 0.38], stage: ['#FFCFE0', 0.38] },
+  // everything that does not move, painted once when the room is laid out
+  paint(g, G, wall, seed) {
+    const { W, H, s } = G, r = rng((seed || 1) + 31), wb = G.wallBottom, lw = Math.max(1.5, s * 0.05);
+    // the wall: wide soft stripes in two tones of its colour, a row of little rounded diamonds down each pale one
+    let gr = g.createLinearGradient(0, 0, 0, wb); gr.addColorStop(0, shade(wall, 0.12)); gr.addColorStop(1, shade(wall, -0.05));
+    g.fillStyle = gr; g.fillRect(0, 0, W, wb + 1);
+    const band = s * 1.3, x0 = (W / 2) % (band * 2) - band * 2;
+    g.fillStyle = rgba(shade(wall, -0.16), 0.38);
+    for (let x = x0; x < W; x += band * 2) g.fillRect(x, 0, band, wb);
+    g.fillStyle = rgba(shade(wall, 0.5), 0.55);              // a pale line down each edge of a stripe
+    for (let x = x0; x < W; x += band * 2) { g.fillRect(x - lw * 0.5, 0, lw, wb); g.fillRect(x + band - lw * 0.5, 0, lw, wb); }
+    g.fillStyle = rgba(shade(wall, -0.22), 0.5);
+    const d = s * 0.17, step = s * 1.1;
+    for (let x = x0 + band * 1.5; x < W + band; x += band * 2) for (let i = 0, y = wb - s * 0.9; y > -step; i++, y -= step) {
+      g.beginPath(); g.moveTo(x, y - d); g.quadraticCurveTo(x + d * 0.75, y - d * 0.75, x + d, y); g.quadraticCurveTo(x + d * 0.75, y + d * 0.75, x, y + d);
+      g.quadraticCurveTo(x - d * 0.75, y + d * 0.75, x - d, y); g.quadraticCurveTo(x - d * 0.75, y - d * 0.75, x, y - d); g.fill();
+    }
+    gr = g.createLinearGradient(0, wb - s * 1.2, 0, wb); gr.addColorStop(0, rgba(shade(wall, -0.3), 0)); gr.addColorStop(1, rgba(shade(wall, -0.3), 0.16));
+    g.fillStyle = gr; g.fillRect(0, wb - s * 1.2, W, s * 1.2);
+
+    // the floor: rows of boards, deeper towards the front, each board its own tone, seams staggered, a little grain and a knot or two
+    const B = this.boards, rows = 11, ink = inkOf(B);
+    g.fillStyle = B; g.fillRect(0, wb, W, H - wb);
+    const ys = []; for (let i = 0; i <= rows; i++) ys.push(lerp(wb, H, (i / rows) ** 1.35));
+    for (let i = 0; i < rows; i++) {
+      const y = ys[i], h = ys[i + 1] - y, len = s * lerp(3.4, 6.5, i / rows);
+      let x = -r() * len;
+      while (x < W) {
+        const w = len * (0.7 + r() * 0.6), tone = shade(B, (r() - 0.5) * 0.14);
+        g.fillStyle = tone; g.fillRect(x, y, w, h);
+        g.fillStyle = rgba(shade(tone, 0.45), 0.7); g.fillRect(x + lw, y + lw * 0.6, w - lw * 2, Math.max(1, lw * 0.7));   // light along its top
+        g.fillStyle = rgba(shade(tone, -0.25), 0.35); g.fillRect(x, y + h - lw * 1.4, w, lw * 1.4);                      // dark along its foot
+        g.strokeStyle = rgba(shade(tone, -0.2), 0.4); g.lineWidth = Math.max(1, lw * 0.6);
+        for (let k = 0; k < 2; k++) {                                                                                   // grain
+          const gy = y + h * (0.3 + r() * 0.45), gx = x + w * r() * 0.4, gw = w * (0.3 + r() * 0.35);
+          g.beginPath(); g.moveTo(gx, gy); g.bezierCurveTo(gx + gw * 0.3, gy - h * 0.08, gx + gw * 0.7, gy + h * 0.08, gx + gw, gy); g.stroke();
+        }
+        if (r() < 0.22) { g.lineWidth = lw; g.beginPath(); g.ellipse(x + w * (0.3 + r() * 0.4), y + h * 0.5, s * 0.14, Math.min(h * 0.18, s * 0.08), 0, 0, TAU); g.stroke(); }
+        g.fillStyle = rgba(ink, 0.45); g.fillRect(x - lw * 0.5, y, lw, h);                                             // the seam
+        x += w;
+      }
+      g.fillStyle = rgba(ink, 0.5); g.fillRect(0, y - lw * 0.5, W, lw);                                                 // between rows
+    }
+    gr = g.createLinearGradient(0, wb, 0, wb + s * 0.9); gr.addColorStop(0, rgba(ink, 0.22)); gr.addColorStop(1, rgba(ink, 0));
+    g.fillStyle = gr; g.fillRect(0, wb, W, s * 0.9);                                                                   // the wall's shadow on the floor
+
+    // the skirting board: a plain chunky board, a lip along its top, outlined in the dark of its own colour
+    const S = this.skirting, sh = s * 0.3, sy = wb - sh;
+    g.fillStyle = S; g.fillRect(0, sy, W, sh);
+    g.fillStyle = shade(S, -0.07); g.fillRect(0, sy + sh * 0.55, W, sh * 0.45);
+    g.fillStyle = '#FFFFFF'; g.fillRect(0, sy + lw, W, sh * 0.22);
+    g.fillStyle = rgba(inkOf(S), 0.5); g.fillRect(0, sy - lw * 0.5, W, lw); g.fillRect(0, wb - lw * 0.5, W, lw);
+  },
+  // the light each window lays on the floor, drawn every frame behind the things. win: { cx, cy, hw, hh } in pixels
+  // Four panes of light, falling a little to the right, fading as they reach forward; its colour is the place outside
+  windowLight(g, G, win, scene) {
+    const [col, a] = this.sun[scene] || this.sun.meadow, s = G.s, y0 = G.wallBottom + s * 0.2;
+    const depth = Math.min(G.H - y0, Math.max(win.hh * 2.2, s * 2.4)), tw = win.hw * 0.8, bw = win.hw * 1.15, lean = win.hw * 0.9;
+    const P = (u, v) => [lerp(win.cx - tw, win.cx - bw + lean, v) + u * lerp(tw, bw, v) * 2, y0 + v * depth];   // u across, v forward, 0..1
+    const gr = g.createLinearGradient(0, y0, 0, y0 + depth); gr.addColorStop(0, rgba(col, a)); gr.addColorStop(1, rgba(col, a * 0.15));
+    g.fillStyle = gr; g.beginPath();
+    const gap = 0.035;
+    for (const [u0, u1] of [[0, 0.5 - gap], [0.5 + gap, 1]]) for (const [v0, v1] of [[0, 0.5 - gap], [0.5 + gap, 1]]) {
+      const q = [P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)];
+      g.moveTo(...q[0]); for (const p of q.slice(1)) g.lineTo(...p); g.closePath();
+    }
+    g.fill();
+  },
+  night: [0, 26, 124],                                        // the colour of the room's dimness, r g b: a cool blue, so the floor stays clean
+};
+
+// ===== things/bed.js =====
+// The bed: a wooden headboard and footboard, a mattress, a pillow, and a blanket that takes the colour.
+// Drawn with (0, 0) where it stands on the floor, in body-radii. Its mattress top is at y = -1.32 (see top).
+// o: { col, occupied }. When someone is in it, src/room.js draws the blanket over them instead (see blanket).
+ROOM_THINGS.bed = {
+  at: 'floor', w: 5.2, h: 2.7, colour: true, top: -1.32,  // the blanket takes the colour
+  draw(g, o) {
+    const wood = '#E8B273', wi = inkOf(wood), whi = shade(wood, 0.35), wlo = shade(wood, -0.14);
+    const sheet = '#FFF9F0', si = inkOf('#E9DCC8'), slo = '#E7E2EE';
+    // the frame under the mattress
+    _pxShape(g, 'M-2.2 -.28 L2.2 -.28 L2.2 -.78 L-2.2 -.78 Z', wood, wi);
+    _pxShape(g, 'M-2.1 -.36 L2.1 -.36 L2.1 -.5 L-2.1 -.5 Z', wlo, null);
+    // the mattress, and its shadow along the bottom
+    _pxShape(g, 'M-2.1 -.74 L2.1 -.74 L2.1 -1.14 Q2.1 -1.32 1.92 -1.32 L-1.92 -1.32 Q-2.1 -1.32 -2.1 -1.14 Z', sheet, si);
+    _pxShape(g, 'M-2.08 -.8 L2.08 -.8 L2.08 -.9 L-2.08 -.9 Z', slo, null);
+    // the pillow, puffed up against the headboard
+    _pxShape(g, 'M-2.05 -1.3 Q-2.2 -1.62 -2.0 -1.9 Q-1.55 -2.02 -1.0 -1.86 Q-.8 -1.6 -.95 -1.3 Q-1.5 -1.22 -2.05 -1.3 Z', sheet, si);
+    _pxShape(g, 'M-1.8 -1.34 Q-1.4 -1.3 -1.07 -1.36 Q-1.01 -1.5 -1.09 -1.6 Q-1.45 -1.48 -1.8 -1.34 Z', slo, null);
+    _pxLine(g, 'M-1.87 -1.76 Q-1.65 -1.84 -1.41 -1.82', { lw: 0.09, ink: '#FFFFFF' });
+    // the headboard, tall, and the footboard, lower, each a chunky post with a round knob
+    const board = (x0, x1, y) => {
+      const m = (x0 + x1) / 2;
+      _pxShape(g, `M${x0} 0 L${x0} ${y + 0.25} Q${x0} ${y} ${m} ${y} Q${x1} ${y} ${x1} ${y + 0.25} L${x1} 0 Z`, wood, wi);
+      _pxShape(g, `M${m + 0.06} -.06 L${x1 - 0.07} -.06 L${x1 - 0.07} ${y + 0.4} Q${m + 0.2} ${y + 0.5} ${m + 0.06} ${y + 0.6} Z`, wlo, null);
+      _pxLine(g, `M${x0 + 0.13} ${y + 0.35} L${x0 + 0.13} ${y + 0.8}`, { lw: 0.09, ink: whi });
+      _pxDot(g, m, y - 0.12, 0.2, wood, wi);
+      _pxLine(g, `M${m - 0.1} ${y - 0.17} Q${m - 0.06} ${y - 0.24} ${m} ${y - 0.25}`, { lw: 0.09, ink: whi });
+    };
+    board(-2.66, -2.0, -2.5);
+    board(2.0, 2.62, -1.8);
+    if (!o.occupied) ROOM_THINGS.bed.blanket(g, o, -1.38, -0.9);
+  },
+  // drawn over a doodling tucked in: from left to the foot of the bed, from top (a y in body-radii) down over the mattress.
+  // Called once per bed, for one or two sleepers, so there is never a seam.
+  blanket(g, o, top, left = -0.9) {
+    const c = o.col, ci = inkOf(c), foot = 2.04, hem = -0.6, fold = Math.min(0.34, (hem - top) * 0.4), m = (left + foot) / 2;
+    const body = `M${left} ${top + 0.06} Q${m} ${top - 0.06} ${foot} ${top + 0.04} L${foot} ${hem + 0.02} Q${(m + foot) / 2} ${hem + 0.08} ${m} ${hem} Q${(left + m) / 2} ${hem - 0.06} ${left} ${hem + 0.02} Z`;
+    _pxShape(g, body, c, null);
+    // a few dots of a lighter tone, fixed to the bed so they stay put as sleepers come and go
+    g.save(); g.clip(_pxPath(body)); g.fillStyle = shade(c, 0.3);
+    for (let y = hem - 0.2, row = 0; y > top + fold + 0.1; y -= 0.42, row++) for (let x = -2.4 + (row % 2) * 0.35; x < foot; x += 0.7) { g.beginPath(); g.arc(x, y, 0.08, 0, TAU); g.fill(); }
+    // one darker fold along the hem, deepest at the foot
+    g.fillStyle = shade(c, -0.16); g.fill(_pxPath(`M${m} ${hem - 0.16} Q${(m + foot) / 2} ${hem - 0.1} ${foot} ${hem - 0.2} L${foot} ${hem + 0.1} L${m} ${hem + 0.1} Z`));
+    g.restore();
+    _pxShape(g, body, null, ci);
+    // the turned-down edge: a lighter band across the top, with a shine at its upper left
+    _pxShape(g, `M${left} ${top + 0.06} Q${m} ${top - 0.06} ${foot} ${top + 0.04} L${foot} ${top + fold + 0.04} Q${m} ${top + fold - 0.04} ${left} ${top + fold + 0.06} Z`, shade(c, 0.5), ci);
+    _pxLine(g, `M${left + 0.18} ${top + 0.13} L${left + Math.min(0.9, (foot - left) * 0.3)} ${top + 0.1}`, { lw: 0.09, ink: '#FFFFFF' });
+  },
+};
+
+// ===== things/lamp.js =====
+// The lamp: a tap turns it on and off. A round base, a pole, a shade that takes the colour, and a pull cord with a bead.
+// (0, 0) is where it stands. Its light comes from LIGHT, the middle of the shade. o: col (the shade), on.
+// Lit, the shade stays her colour, lighter and warmer from the inside, never near white; a dark shade stays dark, with the warm
+// light at its lower rim. The bulb under it glows and light falls from it, so it reads as on by day too.
+ROOM_THINGS.lamp = {
+  at: 'floor', w: 1.5, h: 4.05, colour: true, light: [0, -3.5],   // the shade takes the colour
+  draw(g, o) {
+    const m = '#7480B0', mi = inkOf(m), mlo = shade(m, -0.22), mhi = shade(m, 0.45);
+    const dark = hexToHsl(o.col)[2] < 0.3, amber = '#FFC45C';
+    const col = !o.on ? o.col : dark ? o.col : mix(shade(o.col, 0.24), amber, 0.1), ci = inkOf(o.col);
+    const glow = mix(shade(o.col, 0.42), amber, 0.22);         // the inside light, tinted with her colour
+    // the base: a low dome on the floor
+    _pxShape(g, 'M-.56 -.04 Q-.58 -.3 0 -.32 Q.58 -.3 .56 -.04 Q0 .05 -.56 -.04 Z', m, mi);
+    _pxShape(g, 'M.18 -.29 Q.53 -.26 .55 -.07 Q.4 -.04 .26 -.03 Q.33 -.18 .18 -.29 Z', mlo);
+    _pxShape(g, 'M-.34 -.2 Q-.2 -.26 -.04 -.27', null, mhi);
+    // the pole, with a knob halfway up
+    _pxShape(g, 'M-.08 -.3 L-.08 -3.02 L.08 -3.02 L.08 -.3 Z', m, mi);
+    _pxShape(g, 'M.02 -.32 L.02 -3 L.07 -3 L.07 -.32 Z', mlo);
+    _pxDot(g, 0, -1.7, 0.14, m, mi);
+    _pxDot(g, -0.04, -1.74, 0.04, mhi);
+    // the bulb, peeping out under the shade: grey when off; on, it glows and light falls from it
+    if (o.on) {
+      const gr = g.createLinearGradient(0, -3.05, 0, -1.9);
+      gr.addColorStop(0, 'rgba(255,236,150,0.7)'); gr.addColorStop(1, 'rgba(255,236,150,0)');
+      g.fillStyle = gr; g.fill(_pxPath('M-.6 -3.05 L.6 -3.05 L.78 -1.9 L-.78 -1.9 Z'));
+    }
+    const bulb = o.on ? '#FFF6C2' : '#E9E6DC';
+    g.lineWidth = 0.06; _pxShape(g, 'M-.22 -3.02 Q-.24 -2.7 0 -2.69 Q.24 -2.7 .22 -3.02 Z', bulb, o.on ? '#E0A62E' : inkOf(bulb)); g.lineWidth = 0.09;
+    if (o.on) _pxDot(g, -0.08, -2.84, 0.05, '#FFFFFF');
+    // the shade
+    const sh = 'M-.68 -3.06 L-.4 -3.92 Q0 -3.99 .4 -3.92 L.68 -3.06 Q0 -2.94 -.68 -3.06 Z';
+    _pxShape(g, sh, col, null);
+    g.save(); g.clip(_pxPath(sh));
+    if (o.on && !dark) {                                   // lit from inside: brightest low in the middle, still her colour
+      const gr = g.createRadialGradient(0, -3.3, 0, 0, -3.3, 0.7);
+      gr.addColorStop(0, rgba(glow, 0.85)); gr.addColorStop(1, rgba(glow, 0));
+      g.fillStyle = gr; g.fillRect(-0.8, -4.1, 1.6, 1.2);
+    }
+    _pxShape(g, 'M.24 -3.95 Q.5 -3.4 .46 -2.96 L.8 -2.96 L.8 -4 Z', shade(col, o.on ? -0.12 : -0.22));
+    _pxShape(g, 'M-.7 -3.2 Q0 -3.08 .7 -3.2 L.7 -2.9 L-.7 -2.9 Z', shade(col, o.on ? -0.08 : -0.14));
+    if (o.on) {                                            // the warm light at the lower rim, where it spills out
+      const gr = g.createLinearGradient(0, dark ? -3.42 : -3.3, 0, -2.98);
+      gr.addColorStop(0, 'rgba(255,200,100,0)'); gr.addColorStop(1, dark ? 'rgba(255,196,92,0.95)' : rgba(glow, 0.7));
+      g.fillStyle = gr; g.fillRect(-0.8, -3.5, 1.6, 0.6);
+    }
+    g.restore();
+    _pxShape(g, sh, null, ci);
+    _pxShape(g, 'M-.3 -3.78 L-.46 -3.32', null, shade(col, 0.55));
+    // the pull cord and its bead
+    g.lineWidth = 0.05; _pxShape(g, 'M.3 -3.02 L.3 -2.55', null, mi); g.lineWidth = 0.09;
+    _pxDot(g, 0.3, -2.47, 0.1, '#F2C14E', inkOf('#F2C14E'));
+  },
+};
+
+// ===== things/picture.js =====
+// The picture: the friends this doodling really has, or itself until it has some. A gold frame, a cream mount, a cord on a nail.
+// (0, 0) is the middle of the frame. o.photo(g, x, y, w, h) paints the friends into a box.
+ROOM_THINGS.picture = {
+  at: 'wall', w: 1.8, h: 1.5, colour: false,
+  draw(g, o) {
+    const gold = '#FFC928', gi = inkOf(gold), lo = shade(gold, -0.2), cream = '#FFF3DC', lw = g.lineWidth;
+    // the cord and the nail it hangs on
+    _pxShape(g, 'M-.42 -.56 L0 -.8 L.42 -.56', null, gi);
+    _pxDot(g, 0, -0.8, 0.075, shade(gold, -0.35), gi);
+    // the frame: one chunky rounded band, darker along the bottom and right, a shine on the top left
+    _pxShape(g, 'M-.76 -.6 L.76 -.6 Q.88 -.6 .88 -.48 L.88 .62 Q.88 .74 .76 .74 L-.76 .74 Q-.88 .74 -.88 .62 L-.88 -.48 Q-.88 -.6 -.76 -.6 Z', gold);
+    _pxShape(g, 'M.88 -.4 L.88 .62 Q.88 .74 .76 .74 L-.74 .74 L-.71 .56 L.71 .56 L.71 -.36 Z', lo);
+    _pxShape(g, 'M-.76 -.6 L.76 -.6 Q.88 -.6 .88 -.48 L.88 .62 Q.88 .74 .76 .74 L-.76 .74 Q-.88 .74 -.88 .62 L-.88 -.48 Q-.88 -.6 -.76 -.6 Z', null, gi);
+    g.lineWidth = lw * 0.7; _pxShape(g, 'M-.74 .2 L-.74 -.38 Q-.74 -.46 -.66 -.46 L-.2 -.46', null, shade(gold, 0.6)); g.lineWidth = lw;
+    // the mount, and the photo inside it (never empty: o.photo shows the doodling itself until it has friends)
+    _pxShape(g, 'M-.71 -.43 L.71 -.43 L.71 .56 L-.71 .56 Z', cream); g.lineWidth = lw * 0.6; _pxShape(g, 'M-.71 -.43 L.71 -.43 L.71 .56 L-.71 .56 Z', null, gi); g.lineWidth = lw;
+    o.photo(g, -0.58, -0.35, 1.16, 0.825);
+    g.lineWidth = lw * 0.4; _pxShape(g, 'M-.58 -.35 L.58 -.35 L.58 .475 L-.58 .475 Z', null, mix(cream, gi, 0.3)); g.lineWidth = lw;
+  },
+};
+
+// ===== things/rug.js =====
+// The rug: flat on the floor, where things stand. Room for two doodlings side by side.
+// Drawn with (0, 0) at its middle, on the line the doodlings stand on, in body-radii. o.col is its colour.
+// Every ring and the fringe are tones of that one colour; each outline is the dark of its own fill.
+ROOM_THINGS.rug = {
+  at: 'flat', w: 5.4, h: 1.5, colour: true,
+  draw(g, o) {
+    const c = o.col, ink = inkOf(c), lt = shade(c, 0.5), dk = shade(c, -0.28), lw = g.lineWidth;
+    const oval = (rx, ry, fill, dy = 0) => { g.beginPath(); g.ellipse(0, dy, rx, ry, 0, 0, TAU); g.fillStyle = fill; g.fill(); };
+    // the fringe at each end: chunky tassels, light, outlined in their own dark
+    for (const sx of [-1, 1]) for (let i = -1.5; i <= 1.5; i++) {
+      const y = i * 0.2, x0 = sx * 2.3 * Math.sqrt(1 - (y / 0.66) ** 2), x1 = x0 + sx * 0.36;
+      g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y + 0.03);
+      g.strokeStyle = inkOf(lt); g.lineWidth = 0.24; g.stroke();
+      g.strokeStyle = lt; g.lineWidth = 0.12; g.stroke();
+    }
+    g.lineWidth = lw;
+    // its thickness: the darker edge where it lies on the floor
+    oval(2.45, 0.66, dk, 0.09); g.strokeStyle = ink; g.stroke();
+    oval(2.45, 0.66, c); g.strokeStyle = ink; g.stroke();
+    // the border: a light band, then the colour again
+    oval(2.2, 0.56, lt);
+    oval(1.95, 0.48, c);
+    // a ring of light dots between the border and the middle
+    for (let i = 0; i < 14; i++) { const a = (i / 14) * TAU; g.beginPath(); g.ellipse(Math.cos(a) * 1.68, Math.sin(a) * 0.4, 0.09, 0.05, 0, 0, TAU); g.fillStyle = lt; g.fill(); }
+    // the middle: dark, light, then a small heart of the colour
+    oval(1.36, 0.31, dk);
+    oval(1.04, 0.23, lt);
+    oval(0.58, 0.12, c);
+    // one short shine on the upper left of the border
+    g.beginPath(); g.ellipse(0, 0, 2.2, 0.56, 0, Math.PI * 1.18, Math.PI * 1.36);
+    g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 0.08; g.stroke(); g.lineWidth = lw;
+  },
+};
+
+// ===== things/shelf.js =====
+// The shelf: holds the cups this doodling has really won. A plank on two brackets, with room for three cups.
+// (0, 0) is the middle of the plank. o.cups is a list of medals (1 to 3) to stand on it.
+ROOM_THINGS.shelf = {
+  at: 'wall', w: 2.8, h: 1.9, colour: false,
+  draw(g, o) {
+    const wood = '#E8B273', wi = inkOf(wood), hi = shade(wood, 0.4), lo = shade(wood, -0.16), lw = g.lineWidth;
+    g.fillStyle = 'rgba(90,50,20,0.12)'; g.beginPath(); g.roundRect(-1.24, 0.14, 2.48, 0.13, 0.06); g.fill();   // its shadow on the wall
+    for (const s of [-1, 1]) {                             // the brackets, tapering to the wall
+      g.save(); g.scale(s, 1);
+      _pxShape(g, 'M.66 .1 L1.06 .1 L1.06 .5 Q1.06 .6 .97 .55 Q.72 .4 .66 .1 Z', lo, wi);
+      g.restore();
+    }
+    const plank = new Path2D(); plank.roundRect(-1.32, -0.15, 2.64, 0.3, 0.09);
+    g.fillStyle = wood; g.fill(plank);
+    g.save(); g.clip(plank);
+    g.fillStyle = hi; g.fillRect(-1.4, -0.2, 2.8, 0.15);  // the top of the plank, catching the light
+    g.fillStyle = lo; g.beginPath(); g.roundRect(0.55, 0.02, 1, 0.3, 0.08); g.fill();   // shadow, lower right
+    g.restore();
+    g.strokeStyle = wi; g.stroke(plank);
+    g.lineWidth = lw * 0.55; _pxShape(g, 'M-1.24 -.05 L1.24 -.05', null, wi);
+    _pxShape(g, 'M-1.12 .05 L-.7 .05', null, hi); g.lineWidth = lw;   // a shine, upper left
+    // the cups stand on the plank, a cup's width apart
+    const r = 0.38, foot = -0.15 - lw / 2 - 1.03 * r;
+    o.cups.slice(0, 3).forEach((m, i, a) => drawTrophy(g, (i - (a.length - 1) / 2) * 0.86, foot, r, m));
+  },
+};
+
+// ===== things/window.js =====
+// The window: one of the eight places outside, framed, with a sill, a rod and curtains tied back.
+// Drawn around (0, 0), the middle of the window, in body-radii. o.view(g, x, y, w, h) paints the place outside into a box.
+ROOM_THINGS.window = {
+  at: 'wall', w: 3.4, h: 3.45, colour: true,               // the curtains take the colour
+  draw(g, o) {
+    const wood = '#E8B273', wi = inkOf(wood), lo = shade(wood, -0.16), hi = shade(wood, 0.45);
+    const rod = '#8F6A4E', ri = inkOf(rod), lw = g.lineWidth;
+    // the frame, the place outside, and a little shadow where the frame meets the glass
+    _pxShape(g, 'M-1.02 -1.42 L1.02 -1.42 Q1.12 -1.42 1.12 -1.32 L1.12 1.26 L-1.12 1.26 L-1.12 -1.32 Q-1.12 -1.42 -1.02 -1.42 Z', wood, wi);
+    _pxShape(g, 'M1.12 -1.3 L1.12 1.26 L.98 1.26 L.98 -1.28 Z', lo);
+    o.view(g, -0.96, -1.26, 1.92, 2.42);
+    g.fillStyle = 'rgba(60,40,30,0.18)'; g.fillRect(-0.96, -1.26, 1.92, 0.1); g.fillRect(-0.96, -1.16, 0.08, 2.32);
+    _pxShape(g, 'M-.96 -1.26 L.96 -1.26 L.96 1.16 L-.96 1.16 Z', null, wi);
+    // the glass shines
+    g.lineWidth = lw * 0.9; g.strokeStyle = 'rgba(255,255,255,0.55)';
+    g.beginPath(); g.moveTo(-0.78, -0.5); g.lineTo(-0.4, -1.04); g.moveTo(-0.78, -0.22); g.lineTo(-0.6, -0.48); g.stroke();
+    g.lineWidth = lw;
+    // the bars between the panes
+    _pxShape(g, 'M-.06 -1.26 L.06 -1.26 L.06 1.16 L-.06 1.16 Z', wood, wi);
+    _pxShape(g, 'M-.96 -.14 L.96 -.14 L.96 -.02 L-.96 -.02 Z', wood, wi);
+    _pxShape(g, 'M-.04 -.12 L.04 -.12 L.04 -.04 L-.04 -.04 Z', wood);
+    // the sill
+    _pxShape(g, 'M-1.26 1.2 L1.26 1.2 Q1.34 1.2 1.34 1.28 L1.34 1.44 Q1.34 1.52 1.26 1.52 L-1.26 1.52 Q-1.34 1.52 -1.34 1.44 L-1.34 1.28 Q-1.34 1.2 -1.26 1.2 Z', wood, wi);
+    _pxShape(g, 'M-1.28 1.42 L1.28 1.42 Q1.28 1.48 1.24 1.48 L-1.24 1.48 Q-1.28 1.48 -1.28 1.42 Z', lo);
+    _pxShape(g, 'M-1.18 1.28 L.7 1.28', null, hi);
+    _pxShape(g, 'M-1.02 -1.32 L.6 -1.32 M-1.02 -1.32 L-1.02 .6', null, hi);
+    // the rod with a knob at each end
+    _pxShape(g, 'M-1.56 -1.65 L1.56 -1.65 L1.56 -1.55 L-1.56 -1.55 Z', rod, ri);
+    // the curtains, swept back from the rod's ends to ties at the frame's edges, so the view stays clear
+    const c = o.col, ci = inkOf(c), clo = shade(c, -0.2), chi = shade(c, 0.4), tie = '#FFF3DA';
+    for (const s of [-1, 1]) {
+      g.save(); g.scale(s, 1);
+      _pxShape(g, 'M-1.58 -1.56 L-.72 -1.56 C-.78 -1 -1.1 -.4 -1.16 .2 Q-1.1 .7 -1.12 1.16 Q-1.32 1.24 -1.52 1.16 Q-1.5 .7 -1.4 .26 Q-1.6 -.6 -1.58 -1.56 Z', c, ci);
+      _pxShape(g, 'M-1.58 -1.52 L-1.4 -1.52 Q-1.42 -.6 -1.32 .2 L-1.4 .24 Q-1.6 -.6 -1.58 -1.52 Z', clo);
+      _pxShape(g, 'M-1.34 .4 Q-1.3 .8 -1.34 1.18 L-1.52 1.16 Q-1.5 .7 -1.4 .4 Z', clo);
+      g.lineWidth = lw * 0.6;
+      _pxShape(g, 'M-1 -1.48 C-1.06 -1 -1.2 -.5 -1.26 .12 M-1.26 .42 Q-1.22 .8 -1.26 1.1', null, ci);
+      g.lineWidth = lw * 1.1;
+      _pxShape(g, 'M-.9 -1.44 Q-.98 -1.16 -1.1 -.86', null, chi);
+      g.lineWidth = lw;
+      _pxShape(g, 'M-1.48 .14 Q-1.3 .06 -1.1 .12 Q-1.04 .23 -1.1 .34 Q-1.3 .3 -1.48 .38 Q-1.54 .26 -1.48 .14 Z', tie, inkOf(tie));
+      _pxDot(g, -1.6, -1.6, 0.12, rod, ri);
+      _pxDot(g, -1.63, -1.64, 0.04, shade(rod, 0.5));
+      g.restore();
+    }
+  },
+};
 
 // ===== world.js =====
 // ---------- World: where the doodling lives. Wake it, play, feed, teach, show ----------
@@ -5578,6 +6402,7 @@ const World = (() => {
   let rocket = null, night = 0, dark = 0, shake = 0, flash = 0, time = 0, voiceSize = -1, clouds = [];
   let place = 'meadow', amb = null, wipe = null, toy = null, pals = [], placePanel, palPanel, tunePanel, placeBtn, palBtn, goal = 0;
   let nameTag, fairBtn, snackG = [], snackEls = [], goalAt = -99;
+  let thingPanel, colPanel, armBtn, roomG = null, grow = null;     // the room: its tray, the armchair, where things go on this screen, and a size change in progress
 
   const after = (t, fn) => timers.push({ t: time + t, fn });
   const busy = () => ai.busy || teach.rec || teach.perf || phase !== 'play';
@@ -5648,11 +6473,13 @@ const World = (() => {
     placePanel = el('div', 'panel places', drawer);
     palPanel = el('div', 'panel pals', drawer);
     tunePanel = el('div', 'panel tunes', drawer);
+    thingPanel = el('div', 'panel things', drawer); colPanel = el('div', 'panel thingcols', drawer); Room.buildTray(thingPanel, colPanel);
     dock = el('div', 'dock', root);
     snackBtn = iconBtn('snack', '', dock, 'Snacks', () => openDrawer('snacks'));
     wandBtn = iconBtn('wand', '', dock, 'Tricks', () => openDrawer('tricks'));
     palBtn = iconBtn('friends', '', dock, 'Friends', () => openDrawer('pals'));
     placeBtn = iconBtn('place', '', dock, 'Places', () => openDrawer('places'));
+    armBtn = iconBtn('armchair', 'room', dock, 'Arrange the room', () => openDrawer('things'));
     showBtn = iconBtn('music', '', dock, 'Show time', toggleShow);
   }
 
@@ -5664,6 +6491,11 @@ const World = (() => {
       const cv = Places.thumb(k, 58, theme); cv.style.width = '87px'; cv.style.height = '58px'; b.appendChild(cv);
       b.addEventListener('click', () => { if (k !== place && !busy()) { setPlace(k); drawPlaces(); } });
     });
+    // the ninth: its own room, painted as she left it. It glows until it has been visited once on this device
+    let been = true; try { been = !!localStorage.getItem('doodlings.room.v1'); } catch (e) { /* ignore */ }
+    const b = el('button', 'thumb scene room' + (place === 'room' ? ' on' : '') + (been ? '' : ' glow'), placePanel); b.type = 'button'; b.setAttribute('aria-label', 'Room');
+    const cv = Room.thumb(d, 58); cv.style.width = '87px'; cv.style.height = '58px'; b.appendChild(cv);
+    b.addEventListener('click', () => { if (place !== 'room' && !busy()) { setPlace('room'); drawPlaces(); } });
   }
   // the friends drawer: every other doodling on the shelf, and anyone met on the trail
   const palChoices = () => friendChoices(d);
@@ -5713,6 +6545,9 @@ const World = (() => {
     drawer.dataset.open = next;
     snackPanel.classList.toggle('on', next === 'snacks'); trickPanel.classList.toggle('on', next === 'tricks');
     placePanel.classList.toggle('on', next === 'places'); palPanel.classList.toggle('on', next === 'pals'); tunePanel.classList.toggle('on', next === 'tunes');
+    thingPanel.classList.toggle('on', next === 'things'); colPanel.classList.toggle('on', next === 'things'); armBtn.classList.toggle('on', next === 'things');
+    if (next === 'things') { Room.drawThumbs(); Room.syncTray(); armBtn.classList.remove('glow'); try { localStorage.setItem('doodlings.roomtray.v1', '1'); } catch (e) { /* ignore */ } }
+    else if (place === 'room') Room.deselect();
     if (next === 'tunes') drawTunes();
     snackBtn.classList.toggle('on', next === 'snacks'); wandBtn.classList.toggle('on', next === 'tricks');
     placeBtn.classList.toggle('on', next === 'places'); palBtn.classList.toggle('on', next === 'pals');
@@ -5738,7 +6573,8 @@ const World = (() => {
     const W = App.W, H = App.H;
     env.left = 0; env.right = W; env.top = 0;
     env.floor = H < 560 ? H - 150 : H - (W <= 520 ? 292 : 240);   // the ground starts above the dock and its drawer
-    baseS = clamp(Math.min(W, H * 0.8) * 0.17, 46, 150);
+    baseS = clamp(Math.min(W, H * 0.8) * 0.17, 46, 150) * (place === 'room' ? ROOM.scale : 1);   // in its room a doodling is smaller, so the bed is a bed
+    roomG = place === 'room' ? Room.geo(W, H, env.floor, baseS, tagBottom()) : null;
     const f = Places.feel(place);
     env.g = baseS * 24 * (f.g || 1); env.lift = f.lift || 1; env.slip = f.slip === undefined ? 1 : f.slip; env.air = f.air || 0;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -5755,9 +6591,14 @@ const World = (() => {
 
   // ----- places -----
   function setPlace(k) {
-    const old = backdrop;
+    const old = backdrop, was = place, oldS = baseS;
+    if (was === 'room') { if (drawer.dataset.open === 'things') openDrawer('things'); Room.unbind(); }
     place = d.place = k;
     layout();
+    // a change of size happens while the place wipes in, never in one frame
+    if (baseS !== oldS) grow = { t: 0, from: oldS, to: baseS };
+    if (k === 'room') { bindRoom(); try { localStorage.setItem('doodlings.room.v1', '1'); } catch (e) { /* ignore */ } }
+    syncRoomBtn();
     wipe = { old, t: 0 };
     newToy();
     Sound.sfx('magic'); Sound.sfx('whoosh', { gain: 0.4 });
@@ -5765,6 +6606,21 @@ const World = (() => {
     if (c.asleep) napOver();
     ai.idle = 0;
     App.keepSoon(c);
+  }
+
+  // nothing of the room goes under the buttons or the name tag: the lowest of them, measured when it is on the screen
+  function tagBottom() { const tag = nameTag && nameTag.getBoundingClientRect(); return tag && tag.height ? tag.bottom - App.ui.getBoundingClientRect().top + 10 : 140; }
+  function bindRoom() {
+    Room.bind({ d, c, env, fx: fxp, arranging: () => drawer.dataset.open === 'things', keep: () => App.keepSoon(c), G: () => ({ ...roomG, wallTop: tagBottom() }),
+      // sideways the tray stands at the right: the room lays its things out to the left of it while it is open
+      reserve: () => (App.H < 520 && App.W > App.H ? thingPanel.getBoundingClientRect().width + 24 : 0),
+      repaint: () => layout() });
+  }
+  // the armchair is in the dock for as long as the doodling is in its room, and glows until the tray has been opened once
+  function syncRoomBtn() {
+    armBtn.style.display = place === 'room' ? '' : 'none';
+    let seen = true; try { seen = !!localStorage.getItem('doodlings.roomtray.v1'); } catch (e) { /* ignore */ }
+    armBtn.classList.toggle('glow', place === 'room' && !seen);
   }
 
   // ----- something to play with: every place leaves one thing lying around -----
@@ -5853,7 +6709,7 @@ const World = (() => {
     const i = pals.findIndex((p) => p.c.d.id === pd.id);
     if (i >= 0) { const k = pals[i].c; fxp.burst('puff', k.x, k.y, 8, { speed: 200, size: k.S * 0.3, life: 0.5, color: '#fff', drag: 3 }); Sound.sfx('poof'); pals.splice(i, 1); }
     else if (pals.length >= 3) { wiggle(palPanel); Sound.sfx('error'); return; }
-    else { addPal(pd); Sound.sfx('stick'); if (c.asleep) napOver(); }
+    else { addPal(pd); Sound.sfx('stick'); if (c.asleep && !(place === 'room' && Room.tucked(c))) napOver(); }   // a friend arriving wakes a nap, but not one tucked in bed
     d.pals = pals.map((p) => p.c.d.id);
     App.keepSoon(c);
   }
@@ -5908,7 +6764,8 @@ const World = (() => {
     c.alive = !!d.awake;
     root.classList.add('on');
     drawer.dataset.open = '';
-    for (const e of [snackPanel, trickPanel, placePanel, palPanel, snackBtn, wandBtn, placeBtn, palBtn]) e.classList.remove('on');
+    for (const e of [snackPanel, trickPanel, placePanel, palPanel, thingPanel, colPanel, snackBtn, wandBtn, placeBtn, palBtn, armBtn]) e.classList.remove('on');
+    grow = null; Room.unbind(); if (place === 'room') bindRoom(); syncRoomBtn();
     newToy();
     if (d.awake) { const all = palChoices(); (d.pals || []).forEach((id) => { const pd = all.find((x) => x.id === id); if (pd) addPal(pd, true); }); }
     nameTag.value = d.name || ''; nameTag.classList.remove('pulse'); goalAt = -99;
@@ -5935,7 +6792,8 @@ const World = (() => {
     leaveModes();
     c.fx = {}; c.scT = 1; c.sc = 1; c.asleep = false; c.mouthHold = 0; c.qT = 0;
     c.onLand = c.onWall = c.onFxEnd = c.onHop = null;
-    timers = []; items = []; pals = []; toy = null;
+    timers = []; items = []; pals = []; toy = null; grow = null;
+    Room.unbind();
     GrowHud.hide();
     root.classList.remove('on');
   }
@@ -6242,8 +7100,10 @@ const World = (() => {
     if (phase === 'wake') { wake.holding = true; wake.idle = 0; return; }
     if (ptr) return;
     ai.idle = 0;
-    if (c.asleep) napOver();
-    if (!teach.perf && ai.busy !== 'eat' && ai.busy !== 'think' && c.hit(p.x, p.y)) {
+    if (place === 'room' && Room.downFirst(p)) { ptr = { on: false, room: true, x: p.x, y: p.y, t0: time, moved: 0 }; return; }   // the marks of the thing being arranged
+    if (c.asleep && !(place === 'room' && Room.tucked(c) && (!c.hit(p.x, p.y) || palAt(p)))) napOver();   // tucked in, it sleeps until it is touched itself
+    const asleepInBed = place === 'room' && Room.tucked(c) && !!palAt(p);   // a friend over a sleeping doodling: the finger means the friend
+    if (!asleepInBed && !teach.perf && ai.busy !== 'eat' && ai.busy !== 'think' && c.hit(p.x, p.y)) {
       const [ux, uy] = c.toLocal(p.x, p.y);
       ptr = { on: true, x: p.x, y: p.y, t0: time, moved: 0, squeezed: false };
       c.grab = { ux, uy, tx: p.x, ty: p.y }; c.kin = null; rocket = null;
@@ -6254,6 +7114,7 @@ const World = (() => {
       const pal = palAt(p);
       if (pal) { const [ux, uy] = pal.c.toLocal(p.x, p.y); ptr.pal = pal; pal.perf = null; pal.c.kin = null; pal.c.grab = { ux, uy, tx: p.x, ty: p.y }; }
       else if (toy && hypot(p.x - toy.x, p.y - toy.y) < toy.r + 24) { ptr.toy = true; toy.grab = true; Sound.sfx('pick'); }
+      else if (place === 'room' && Room.down(p)) ptr.room = true;
     }
     c.lookAt = { x: p.x, y: p.y };
   }
@@ -6261,6 +7122,7 @@ const World = (() => {
     if (!ptr) { if (c && c.alive && !held) c.lookAt = { x: p.x, y: p.y }; return; }
     ptr.moved += hypot(p.x - ptr.x, p.y - ptr.y);
     ptr.x = p.x; ptr.y = p.y;
+    if (ptr.room) { Room.move(p); return; }
     if (ptr.on && c.grab) { c.grab.tx = p.x; c.grab.ty = p.y; }
     if (ptr.pal && ptr.pal.c.grab) { ptr.pal.c.grab.tx = p.x; ptr.pal.c.grab.ty = p.y; }
     c.lookAt = { x: p.x, y: p.y };
@@ -6270,16 +7132,19 @@ const World = (() => {
     if (!ptr) return;
     const t = ptr, dt = time - t.t0;
     ptr = null;
+    if (t.room) { Room.up(p || t); return; }
     if (t.on) {
       c.grab = null;
       if (teach.rec) { finishRec(); return; }
       if (t.squeezed) { squeezeRelease(); return; }
       if (t.moved < 14 && dt < 0.4) { boop(p || t); return; }
+      if (place === 'room' && Room.dropped(c)) { ai.snore = 0.8; ai.idle = 0; Sound.voice('yawn'); c.say(0.3); c.lookAt = null; return; }   // let go over the bed: tucked in
       const sp = hypot(c.vx, c.vy);
       if (sp > c.S * 9 && !c.fx.ice) { Sound.voice('whee'); c.say(0.35); c.setMood('happy', 0.9); Sound.sfx('whoosh', { gain: 0.5 }); }
       if (ai.spin > 16 && !c.fx.ice) after(0.5, () => { c.setMood('dizzy', 2.2); Sound.voice('dizzy'); });
     } else if (t.pal) {
       const k = t.pal.c; k.grab = null;
+      if (t.moved >= 14 && place === 'room' && Room.dropped(k)) { palVoice(k, 'yawn'); k.say(0.3); return; }
       if (t.moved < 14 && dt < 0.4) { fxp.emit('ring', t.x, t.y, { size: 46, life: 0.35, color: 'rgba(255,255,255,0.9)' }); k.poke(t.x, t.y); palVoice(k, 'boop', { pitch: rand(-2, 4) }); k.say(0.14); k.setMood('wide', 0.3); t.pal.tagT = 3; }
       else if (hypot(k.vx, k.vy) > k.S * 9) { palVoice(k, 'whee'); k.say(0.35); k.setMood('happy', 0.9); }
     } else if (t.toy) {
@@ -6436,6 +7301,11 @@ const World = (() => {
     flash = Math.max(0, flash - dt * 1.7);
     syncVoice();
 
+    if (grow) {                                           // the doodlings grow or shrink while the place wipes in
+      grow.t += dt; const s = lerp(grow.from, grow.to, ease.inOut(clamp01(grow.t / 0.6)));
+      c.baseS = s; for (const p of pals) p.c.baseS = s * 0.9;
+      if (grow.t >= 0.6) grow = null;
+    }
     think(dt);
     c.step(dt, env);
     stepPals(dt);
@@ -6533,12 +7403,15 @@ const World = (() => {
       }
       g.restore();
     }
+    // in the room, those tucked in are drawn first with their blanket over them; whoever is awake is in front of the bed
+    const inBed = (k) => place === 'room' && Room.tucked(k);
     for (const p of pals) p.c.drawShadow(g, env.floor);
-    for (const p of pals) p.c.draw(g);
+    if (place === 'room') { for (const p of pals) if (inBed(p.c)) p.c.draw(g); if (inBed(c)) c.draw(g); amb.blankets(g); }
+    for (const p of pals) if (!inBed(p.c)) p.c.draw(g);
     for (const p of pals) if (p.tagT > 0) drawNameTag(g, p.c.d.name, p.c.x, p.c.bounds.minY - 16, 14, clamp01(p.tagT * 2));
     if (toy) drawToy(g);
     for (const it of items) drawSnack(g, it.k, it.x, it.y, it.r * (it.scale || 1), it.rot);
-    c.draw(g);
+    if (!inBed(c)) c.draw(g);
     if (held && held.out) drawSnack(g, held.k, held.x, held.y - 6, baseS * 0.36, Math.sin(held.t * 5) * 0.12);
     fxp.draw(g, false);
     amb.front(g);
@@ -6592,7 +7465,7 @@ const World = (() => {
 
   function resize() {
     if (!root || !c) return;
-    layout(); c.baseS = baseS;
+    layout(); c.baseS = baseS; grow = null; for (const p of pals) p.c.baseS = baseS * 0.9;
   }
 
   // the music stops when the tab is hidden, so the show ends with it
@@ -6601,7 +7474,7 @@ const World = (() => {
   // read-only peek for the automated play-through (test/play.mjs)
   window.__doodLink = (budget) => Codec.encode(d, budget);
   window.__doodStay = (v) => { ai.stay = v; };              // the guide recorder: do not wander off after the ball mid-picture
-  window.__dood = () => (c ? { x: c.x, y: c.y, S: c.S, fx: Object.keys(c.fx), mood: c.currentMood(), phase, busy: ai.busy, tricks: d.tricks.length, name: d.name, levels: Grow.levels(d), grow: JSON.parse(JSON.stringify(Grow.of(d))), look: c.look, guests: pals.filter((p) => p.c.d.guest).length, place, voice: d.voice, tune: d.tune, band: Sound.music.playing ? Sound.music.theme : null, pals: pals.map((p) => ({ x: p.c.x, y: p.c.y })), toy: toy && { k: toy.k, x: toy.x, y: toy.y, r: toy.r }, net: amb && amb.net, asleep: c.asleep, floor: env.floor, grounded: c.standing, vx: c.vx, vy: c.vy, b: { ...c.bounds }, mouth: c.mouthPos(), face: c.facePos() } : null);
+  window.__dood = () => (c ? { x: c.x, y: c.y, S: c.S, fx: Object.keys(c.fx), mood: c.currentMood(), phase, busy: ai.busy, tricks: d.tricks.length, name: d.name, levels: Grow.levels(d), grow: JSON.parse(JSON.stringify(Grow.of(d))), look: c.look, guests: pals.filter((p) => p.c.d.guest).length, place, voice: d.voice, tune: d.tune, band: Sound.music.playing ? Sound.music.theme : null, pals: pals.map((p) => ({ x: p.c.x, y: p.c.y })), toy: toy && { k: toy.k, x: toy.x, y: toy.y, r: toy.r }, net: amb && amb.net, asleep: c.asleep, room: place === 'room' ? Room.peek() : null, arranging: drawer && drawer.dataset.open === 'things', floor: env.floor, grounded: c.standing, vx: c.vx, vy: c.vy, b: { ...c.bounds }, mouth: c.mouthPos(), face: c.facePos() } : null);
 
   return { enter, exit, step, draw, down, move, up, resize, _beat: onBeat, syncName: () => { if (nameTag && d) nameTag.value = d.name || ''; } };
 })();
@@ -9906,7 +10779,7 @@ window.__doodArt = {
 };
 
 // the drawing internals, for contact sheets (tools/look.mjs)
-window.__doodKit = { App, Places, PARTS, PART_TRAYS, PLACE_LIST, QUESTS, PONDS, VOICE_LIST, TUNE_LIST, drawPartThumb, makeDemo, Critter, worldTheme, PALETTE,
+window.__doodKit = { App, Places, Room, ROOM_THINGS, ROOM_PAINT, PARTS, PART_TRAYS, PLACE_LIST, QUESTS, PONDS, VOICE_LIST, TUNE_LIST, drawPartThumb, makeDemo, Critter, worldTheme, PALETTE,
   Shape, Snacks, newCreatureData, partTint, shade, inkOf, Grow, GrowHud, Codec, Cup, Shoot, Fair, LOOKS, PRIZES, CUPS, QUALS, SHOOT, ShootRules };
 
 })();
