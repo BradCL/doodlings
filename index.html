@@ -339,6 +339,18 @@ input.tag.pulse { animation: pulse 1.5s ease-in-out infinite; box-shadow: 0 0 0 
   .panel.thingcols { padding: 6px 10px; }
 }
 
+/* her room, painted small beside the name: always on the play screen, one tap goes there. The painting fills the button
+   with the same thin rim as the places drawer's paintings; in the room the ring goes round the outside */
+.door { position: absolute; z-index: 5; width: 77px; height: 54px; padding: 4px; border: 0; border-radius: 15px; background: #fff; cursor: pointer; touch-action: manipulation;
+  display: grid; place-items: center; box-shadow: 0 3px 0 rgba(43,45,66,.13), 0 6px 14px rgba(43,45,66,.12); transition: transform .16s cubic-bezier(.3,1.6,.5,1); }
+.door canvas { width: 69px !important; height: 46px !important; border-radius: 11px; pointer-events: none; display: block; }
+.door:active { transform: scale(.92); }
+.door.here { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--ink); }
+.door.glow { animation: glow 1.4s ease-in-out infinite; }
+.waking .door { opacity: 0; pointer-events: none; transform: translateY(-40px); }
+/* on a small phone the name moves over a little, so her room keeps its full size with air at the edge */
+@media (max-width: 380px) { input.tag { margin-left: calc(min(190px, 50vw) / -2 + 10px); } }
+
 </style>
 </head>
 <body>
@@ -6402,7 +6414,7 @@ const World = (() => {
   let rocket = null, night = 0, dark = 0, shake = 0, flash = 0, time = 0, voiceSize = -1, clouds = [];
   let place = 'meadow', amb = null, wipe = null, toy = null, pals = [], placePanel, palPanel, tunePanel, placeBtn, palBtn, goal = 0;
   let nameTag, fairBtn, snackG = [], snackEls = [], goalAt = -99;
-  let thingPanel, colPanel, armBtn, roomG = null, grow = null;     // the room: its tray, the armchair, where things go on this screen, and a size change in progress
+  let thingPanel, colPanel, armBtn, roomG = null, grow = null, doorBtn, doorKey = '';   // doorBtn: her room, painted small beside the name     // the room: its tray, the armchair, where things go on this screen, and a size change in progress
 
   const after = (t, fn) => timers.push({ t: time + t, fn });
   const busy = () => ai.busy || teach.rec || teach.perf || phase !== 'play';
@@ -6418,6 +6430,9 @@ const World = (() => {
     fairBtn = iconBtn('tent', 'primary trail', top, 'The fair', () => { Sound.sfx('page'); leaveModes(); App.keep(c); try { localStorage.setItem('doodlings.fair.v1', '1'); } catch (e) { /* ignore */ } App.go('fair', { critter: c }); });
     iconBtn('pencil', 'ghost', top, 'Change it', () => { Sound.sfx('page'); leaveModes(); App.go('studio', { critter: c }); });
     iconBtn('camera', 'ghost', top, 'Keepsake card', () => { Sound.sfx('camera'); leaveModes(); Card.open(c, pals.map((p) => p.c.d)); });
+    // her room, painted small beside the name: always there, one tap goes to it (Brad, 2026-11-14: "its home feels personal like its name")
+    doorBtn = el('button', 'door', root); doorBtn.type = 'button'; doorBtn.setAttribute('aria-label', 'Its room');
+    doorBtn.addEventListener('click', () => { Sound.unlock(); goRoom(false); });
     // its name, on a tag under the buttons: tap to write it or change it
     nameTag = el('input', 'tag', root);
     nameTag.type = 'text'; nameTag.maxLength = 14; nameTag.placeholder = '✎'; nameTag.setAttribute('aria-label', 'Name');
@@ -6479,7 +6494,7 @@ const World = (() => {
     wandBtn = iconBtn('wand', '', dock, 'Tricks', () => openDrawer('tricks'));
     palBtn = iconBtn('friends', '', dock, 'Friends', () => openDrawer('pals'));
     placeBtn = iconBtn('place', '', dock, 'Places', () => openDrawer('places'));
-    armBtn = iconBtn('armchair', 'room', dock, 'Arrange the room', () => openDrawer('things'));
+    armBtn = iconBtn('armchair', 'room', dock, 'Arrange the room', () => { if (place === 'room') openDrawer('things'); else goRoom(true); });   // from anywhere: to the room, tray open
     showBtn = iconBtn('music', '', dock, 'Show time', toggleShow);
   }
 
@@ -6617,10 +6632,27 @@ const World = (() => {
       repaint: () => layout() });
   }
   // the armchair is in the dock for as long as the doodling is in its room, and glows until the tray has been opened once
+  // The way into the room from anywhere. In the room already, it answers with a little bounce and goes nowhere.
+  function goRoom(tray) {
+    if (busy()) { wiggle(doorBtn); return; }
+    if (place === 'room') { popIn(doorBtn); Sound.sfx('tap'); if (tray && drawer.dataset.open !== 'things') openDrawer('things'); return; }
+    if (drawer.dataset.open) openDrawer(drawer.dataset.open);   // close whatever drawer is open
+    setPlace('room'); if (tray) openDrawer('things');
+  }
+  // the armchair is always in the dock; the glow is on her room's painting until the room has been visited once on this device
   function syncRoomBtn() {
-    armBtn.style.display = place === 'room' ? '' : 'none';
-    let seen = true; try { seen = !!localStorage.getItem('doodlings.roomtray.v1'); } catch (e) { /* ignore */ }
-    armBtn.classList.toggle('glow', place === 'room' && !seen);
+    let been = true; try { been = !!localStorage.getItem('doodlings.room.v1'); } catch (e) { /* ignore */ }
+    doorBtn.classList.toggle('glow', !been);
+    doorBtn.classList.toggle('here', place === 'room');
+    armBtn.classList.remove('glow');
+    drawDoor();
+  }
+  // her room as it is now, redrawn when it changes
+  function drawDoor() {
+    const key = JSON.stringify(d.room || '') + d.seed;
+    if (key === doorKey) return;
+    doorKey = key; doorBtn.replaceChildren();
+    const cv = Room.thumb(d, 46); doorBtn.appendChild(cv);   // the size of the sketch Brad said yes to (69 by 46); CSS fits it to the button
   }
 
   // ----- something to play with: every place leaves one thing lying around -----
@@ -7454,6 +7486,8 @@ const World = (() => {
     }
     if (flash > 0.01) { g.fillStyle = `rgba(255,252,235,${flash * flash})`; g.fillRect(0, 0, W, H); }
     const nt = nameTag.getBoundingClientRect(), root = App.ui.getBoundingClientRect();   // at home the gift waits beside the doodling's name
+    if (nt.width) { const bw = doorBtn.offsetWidth || 77, bh = doorBtn.offsetHeight || 54; doorBtn.style.left = Math.max(12, nt.left - root.left - 8 - bw) + 'px'; doorBtn.style.top = (nt.top - root.top + nt.height / 2 - bh / 2) + 'px'; }   // her room, on the other side
+    if (place === 'room' || drawer.dataset.open === 'things') drawDoor();
     GrowHud.draw(g, W, 122, phase === 'play' && !show.on ? c : null, nt.width ? { x: nt.right - root.left + 26, y: nt.top - root.top + nt.height / 2 } : null);
   }
 
