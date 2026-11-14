@@ -106,6 +106,25 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--paper)
 .shelfnav.left { left: 12px; }
 .shelfnav.right { right: 12px; }
 
+/* the extra check before a doodling is thrown away, and the way back after */
+.confirm { place-items: center; }
+.confirm.on { display: grid; }
+.confirmbox { display: grid; justify-items: center; gap: 14px; padding: 18px 22px 20px; border-radius: 28px; background: var(--card); box-shadow: 0 20px 50px rgba(0,0,0,.3); animation: pop .3s cubic-bezier(.3,1.4,.5,1); }
+.confirmbox .row { display: flex; gap: 34px; }
+.confirmbox .btn, .confirmbox .btn.ghost { --btn: 64px; }
+.btn.danger { background: var(--coral); color: #fff; }
+.backbtn { position: absolute; left: calc(50% - 46px - 100px); bottom: calc(7vh + var(--sab) + 10px); width: 72px; height: 72px; padding: 0; border: 0; border-radius: 50%; background: var(--card);
+  box-shadow: 0 4px 0 rgba(43,45,66,.13), 0 8px 18px rgba(43,45,66,.16); display: none; place-items: center; cursor: pointer; }
+.backbtn.on { display: grid; animation: pop .3s cubic-bezier(.3,1.4,.5,1); }
+.backbtn canvas { border-radius: 50%; pointer-events: none; }
+.backbtn .badge { position: absolute; right: -6px; bottom: -6px; width: 32px; height: 32px; border-radius: 50%; background: var(--sun); color: var(--ink); display: grid; place-items: center; box-shadow: 0 2px 0 rgba(43,45,66,.2); pointer-events: none; }
+.backbtn .badge svg { width: 20px; height: 20px; }
+/* the time left to bring it back: a ring that empties */
+.backbtn .drain { position: absolute; inset: -5px; pointer-events: none; }
+.backbtn .drain svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.backbtn .drain circle { fill: none; stroke: var(--ink); stroke-width: 5; stroke-linecap: round; stroke-dasharray: 289; stroke-dashoffset: 0; opacity: .5; }
+.backbtn.on .drain circle { animation: drain 6s linear forwards; }
+@keyframes drain { to { stroke-dashoffset: 289; } }
 .home .bookbtn { position: absolute; top: calc(12px + var(--sat)); left: 12px; }
 .overlay.book { z-index: 50; }
 .bookframe { width: min(96vw, 620px); height: min(94vh, 960px); border: 0; border-radius: 26px; background: #FBF3E4; box-shadow: 0 24px 60px rgba(0,0,0,.4); }
@@ -204,9 +223,18 @@ input.name:focus { box-shadow: 0 0 0 4px var(--sun), 0 10px 22px rgba(43,45,66,.
 .panel.tunes { grid-template-columns: repeat(5, auto); }
 .thumb.voice, .thumb.tune { background: transparent; box-shadow: none; }
 .thumb.pal { background: #FFF6DF; }
-.storage-notice { position: absolute; top: calc(70px + var(--sat)); left: 50%; transform: translateX(-50%); width: min(90vw, 440px); padding: 12px 16px; background: #FFF4CD; color: var(--ink);
-  border-radius: 18px; box-shadow: 0 0 0 2px #D99A00, 0 10px 22px rgba(43,45,66,.14); font-size: 14px; font-weight: 700; z-index: 60; text-align: center; pointer-events: auto; }
+.storage-notice { position: absolute; display: flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 16px; background: var(--card); color: var(--ink);
+  border: 2.5px solid var(--ink); box-shadow: 0 4px 10px rgba(43,45,66,.18); z-index: 30; pointer-events: none; }
+/* its tail, up to the camera: an ink triangle with a cream one inside */
+.storage-notice::before, .storage-notice::after { content: ''; position: absolute; left: var(--tail, 50%); bottom: 100%; }
+.storage-notice::before { width: 30px; height: calc(var(--tailh, 10px) + 1px); margin-left: -15px; background: var(--ink); clip-path: polygon(46% 0, 54% 0, 100% 100%, 0 100%); }
+.storage-notice::after { width: 23px; height: calc(var(--tailh, 10px) - 5px); margin-left: -11.5px; margin-bottom: -3px; background: var(--card); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.storage-notice svg { width: 26px; height: 26px; display: block; }
+.storage-notice svg:nth-child(2) { width: 16px; height: 16px; }
 .storage-notice[hidden] { display: none; }
+/* only where its camera is: on the play screen, and not while the card itself is open */
+#ui:not(:has(.screen.on .btn[aria-label="Keepsake card"])) .storage-notice, #ui:has(.overlay.on) .storage-notice { display: none; }
+#ui.nosave:not(.keptpic) .screen.on .btn[aria-label="Keepsake card"] { animation: glow 1.4s ease-in-out infinite; }
 
 /* ----- the adventure trail ----- */
 .questbar { position: absolute; left: 50%; bottom: calc(14px + var(--sab)); transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 34px; max-width: calc(100% - 16px);
@@ -1037,6 +1065,7 @@ const ICONS = {
   puck: _svg('<path d="M17.500 3.500 12.200 15.800H6.300" stroke-width="2.600"/><ellipse cx="17" cy="18.600" rx="3.400" ry="1.700" fill="currentColor"/>'),
   again: _svg('<path d="M19.300 12.500a7.300 7.300 0 1 1-2.200-5.700"/><path d="M19.600 3.500v4.300h-4.300"/>', 'stroke-width="2.800"'),
   rewind: _svg('<path d="M11.500 6.500v11L4 12zM20 6.500v11L12.500 12z" fill="currentColor"/>', 'stroke-width="2"'),
+  keepcard: _svg('<rect x="5" y="2.800" width="14" height="18.400" rx="2.600"/><rect x="7.600" y="5.400" width="8.800" height="7.600" rx="1.200" fill="currentColor" stroke="none" opacity=".25"/><path d="M13.200 15.600h3.200v3.200h-3.200z" fill="currentColor" stroke="none"/><path d="M7.600 16.200h3"/>'),
   suitcase: _svg('<rect x="3.500" y="8" width="17" height="11.500" rx="2.800"/><path d="M9 8V5.300h6V8M3.500 13.200h17M12 12v2.400"/>'),
 };
 // one, two or three stars: how hard the shootout is
@@ -7800,6 +7829,7 @@ const Card = (() => {
 
   function save() {
     Sound.sfx('camera');
+    App.ui.classList.add('keptpic');   // she has kept its picture this visit: a camera that could not save stops glowing
     const fname = ((d.name || 'doodling').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'doodling') + '.png';
     cv.toBlob(async (blob) => {
       if (!blob) return;
@@ -10470,6 +10500,7 @@ const Home = (() => {
   let root, addBtn, crew = [], env = { g: 2000, floor: 0, left: 0, right: 0, top: -400 }, S = 60, t = 0;
   let press = null, doomed = null, look = { x: 0, y: 0 }, blink = 0, blinkT = 2;
   let page = 0, pages = 1, prevBtn, nextBtn, waitC = null;
+  let conf, confBox, asking = null, backBtn, gone = null;   // the extra check before throwing a doodling away, and the way back after
 
   function build() {
     root = el('div', 'screen home', App.ui);
@@ -10482,6 +10513,49 @@ const Home = (() => {
     // more doodlings than fit on the shelf: turn the page
     prevBtn = iconBtn('back', 'ghost shelfnav left', root, 'Newer doodlings', () => { Sound.sfx('page'); page--; enter(); });
     nextBtn = iconBtn('next', 'ghost shelfnav right', root, 'Earlier doodlings', () => { Sound.sfx('page'); page++; enter(); });
+    // after the red cross, one more step: the doodling, large, and two buttons. The cross closes it and keeps her; the bin throws her away
+    conf = el('div', 'overlay confirm', root);
+    confBox = el('div', 'confirmbox', conf);
+    const pic = el('div', 'confirmpic', confBox);
+    const row = el('div', 'row', confBox);
+    iconBtn('close', 'ghost', row, 'Keep it', keepIt);
+    iconBtn('trash', 'danger', row, 'Throw it away', throwAway);
+    confBox.addEventListener('click', (e) => e.stopPropagation());
+    conf.addEventListener('click', keepIt);
+    conf.pic = pic;
+    // then, for a few seconds, a way back: her picture with the undo arrow
+    backBtn = el('button', 'backbtn', root); backBtn.type = 'button'; backBtn.setAttribute('aria-label', 'Bring it back');
+    backBtn.addEventListener('click', bringBack);
+  }
+  function drawPic(host, d, size) {
+    host.replaceChildren();
+    const [, gg] = miniCanvas(size, host);
+    const k = new Critter({ ...d, parts: d.parts.map((p) => ({ ...p })) }); k.alive = true; k.mood = 'idle'; k.moodT = 9;
+    let s = size * 0.3; k.pose(size / 2, 0, s);
+    const fit = Math.min(size * 0.5 / (k.bounds.maxX - k.bounds.minX), size * 0.5 / (k.bounds.maxY - k.bounds.minY)); s *= Math.min(1.6, fit);   // the body fills half the picture, leaving room for arms and hat
+    k.pose(size / 2, 0, s); k.pose(size / 2 - (k.bounds.minX + k.bounds.maxX) / 2 + size / 2, size * 0.56 - (k.bounds.minY + k.bounds.maxY) / 2, s); k.draw(gg);
+  }
+  function ask(m) {
+    asking = m; Sound.sfx('pick');
+    drawPic(conf.pic, m.c.d, Math.round(clamp(Math.min(App.W, App.H) * 0.42, 150, 240)));
+    conf.classList.add('on');
+  }
+  function keepIt() { if (!asking) return; Sound.sfx('tap'); asking.c.setMood('happy', 1.2); asking.c.hop(0, 0.8); asking = null; conf.classList.remove('on'); }
+  function throwAway() {
+    if (!asking) return;
+    const c = asking.c, i = App.list.findIndex((d) => d.id === c.d.id);
+    asking = null; conf.classList.remove('on');
+    gone = { d: c.d, i, t: 0 };
+    App.remove(c.d.id); App.fx.burst('puff', c.x, c.y, 10, { speed: 220, size: S * 0.5, life: 0.6, color: '#fff', drag: 3 }); Sound.sfx('delete');
+    enter(true);
+    backBtn.replaceChildren(); drawPic(backBtn, gone.d, 62); el('span', 'badge', backBtn, ICONS.undo);
+    el('span', 'drain', backBtn, '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46"/></svg>');
+    backBtn.classList.remove('on'); void backBtn.offsetWidth; backBtn.classList.add('on');
+  }
+  function bringBack() {
+    if (!gone) return;
+    App.list.splice(clamp(gone.i, 0, App.list.length), 0, gone.d); App.save();
+    Sound.sfx('undo'); gone = null; backBtn.classList.remove('on'); enter();
   }
 
   function layout() {
@@ -10492,8 +10566,10 @@ const Home = (() => {
     crew.forEach((m) => { m.c.baseS = S; });
   }
 
-  function enter() {
+  function enter(keepBack) {
     if (!root) build();
+    if (!keepBack) { gone = null; backBtn.classList.remove('on'); }
+    asking = null; conf.classList.remove('on');
     App.fx.clear();
     const all = App.list.filter((d) => d.outline), per = clamp(Math.floor(App.W / 190), 3, 6);
     pages = Math.max(1, Math.ceil(all.length / per)); page = clamp(page, 0, pages - 1);
@@ -10516,14 +10592,14 @@ const Home = (() => {
     addBtn.classList.toggle('pulse', !all.length || !!App.waiting);
     root.classList.add('on');
   }
-  function exit() { root.classList.remove('on'); }
+  function exit() { root.classList.remove('on'); gone = null; asking = null; backBtn.classList.remove('on'); conf.classList.remove('on'); }
 
   function at(p) { for (let i = crew.length - 1; i >= 0; i--) if (crew[i].c.hit(p.x, p.y, 1.3)) return crew[i]; return null; }
 
   function down(p) {
     if (doomed) {
       const c = doomed.c;
-      if (hypot(p.x - c.x, p.y - (c.bounds.minY - 34)) < 30) { App.remove(c.d.id); App.fx.burst('puff', c.x, c.y, 10, { speed: 220, size: S * 0.5, life: 0.6, color: '#fff', drag: 3 }); Sound.sfx('delete'); doomed = null; enter(); return; }
+      if (hypot(p.x - c.x, p.y - (c.bounds.minY - 34)) < 30) { const m = doomed; doomed = null; ask(m); return; }
       doomed = null;
     }
     const m = at(p);
@@ -10551,6 +10627,7 @@ const Home = (() => {
     blinkT -= dt; if (blinkT <= 0) { blink = 0.14; blinkT = rand(2, 5); } blink = Math.max(0, blink - dt);
     if (press) { press.t += dt; if (press.t > 0.65 && press.m.saved && press.moved < 20 && doomed !== press.m) { doomed = press.m; doomed.t = 0; Sound.sfx('pick'); press.m.c.setMood('wide', 1); } }
     if (doomed) { doomed.t += dt; if (doomed.t > 4) doomed = null; }
+    if (gone && (gone.t += dt) > 6) { gone = null; backBtn.classList.remove('on'); }
     for (const m of crew) {
       const c = m.c;
       m.t -= dt;
@@ -10674,15 +10751,33 @@ const App = {
     try {
       const list = this.list.map((d) => ({ ...d, parts: d.parts.map((p) => ({ k: p.k, x: +p.x.toFixed(4), y: +p.y.toFixed(4), s: +(p.s || 1).toFixed(3), r: +(p.r || 0).toFixed(3), c: p.c || null })), outline: d.outline ? d.outline.map((v) => +v.toFixed(4)) : null, paint: d.paint.map((s) => ({ c: s.c, w: s.w, p: s.p.map((v) => +v.toFixed(4)) })) }));
       localStorage.setItem('doodlings.v1', JSON.stringify({ list, muted: this.muted }));
-      if (this.storageNotice) this.storageNotice.hidden = true;
+      if (this.storageNotice) { this.storageNotice.hidden = true; this.ui.classList.remove('nosave'); }
+      if (list.some((d) => d.awake)) this.askToKeep();
     } catch (e) {
+      // this device cannot keep doodlings: no sentence, a picture. A small bubble hangs from the camera: camera, then its card.
+      // The camera glows until she keeps its picture this visit (card.js), then the bubble stays quietly. A note, never a button: taps pass through
       if (!this.storageNotice && this.ui) {
-        this.storageNotice = el('div', 'storage-notice', this.ui);
+        this.storageNotice = el('div', 'storage-notice', this.ui, ICONS.camera + ICONS.next + ICONS.keepcard);
+        this.storageNotice.hidden = true;
         this.storageNotice.setAttribute('role', 'status');
-        this.storageNotice.textContent = 'This browser cannot save. Before leaving, use the camera, then save a playable copy.';
+        this.storageNotice.setAttribute('aria-label', 'This device cannot keep doodlings: take its card with the camera');
       }
-      if (this.storageNotice) this.storageNotice.hidden = false;
+      if (this.storageNotice) { this.storageNotice.hidden = false; this.ui.classList.add('nosave'); }
     }
+  },
+  // once a doodling is awake, ask the browser to keep this device's saves even when space runs low or the site goes unused.
+  // Asked once a visit; nothing is shown. If the browser says no, saving goes on just as before.
+  askToKeep() {
+    if (this.keepAsked) return;
+    this.keepAsked = true;
+    const st = navigator.storage;
+    if (!st || !st.persist || !st.persisted) { this.kept = 'cannot ask'; return; }
+    // Never in Firefox: there the browser puts a question in words to the person, and a child would meet it as her doodling wakes
+    // (the toy's first rule; and "Block" tapped once is kept). Chrome, Edge and Safari decide quietly. Firefox is told apart two ways:
+    // its name in the user agent, and its engine's own style property (which forks that rename themselves still have).
+    // Firefox on an iPhone or iPad is Safari's engine underneath, has neither, and decides quietly, so it is asked.
+    if (/\bFirefox\//.test(navigator.userAgent) || (window.CSS && CSS.supports && CSS.supports('-moz-appearance', 'none'))) { this.kept = 'not asked: Firefox'; return; }
+    st.persisted().then((on) => (on ? true : st.persist())).then((on) => { this.kept = on ? 'kept' : 'not kept'; }).catch(() => { this.kept = 'not kept'; });
   },
   // remember a creature (newest first)
   keep(c) {
@@ -10829,8 +10924,22 @@ const App = {
   },
 
   // one frame of the whole experience
+  // the bubble hangs from whichever camera is showing, below the name when the two would meet, its tail pointing up at the camera
+  placeNotice() {
+    const n = this.storageNotice; if (!n || n.hidden) return;
+    const cam = [...this.ui.querySelectorAll('.screen.on .btn[aria-label="Keepsake card"]')].find((e) => e.offsetParent);
+    if (!cam) return;
+    const r = cam.getBoundingClientRect(), u = this.ui.getBoundingClientRect(), w = n.offsetWidth, cx = r.left + r.width / 2 - u.left;
+    const left = clamp(cx - w * 0.72, 8, u.width - w - 8);
+    let top = r.bottom - u.top + 14;
+    const tag = this.ui.querySelector('.screen.on input.tag');
+    if (tag && tag.offsetParent) { const t = tag.getBoundingClientRect(); if (left < t.right - u.left && left + w > t.left - u.left && top < t.bottom - u.top + 10) top = t.bottom - u.top + 12; }
+    n.style.left = left + 'px'; n.style.top = top + 'px';
+    n.style.setProperty('--tail', (cx - left) + 'px'); n.style.setProperty('--tailh', Math.max(10, top - (r.bottom - u.top) - 2) + 'px');
+  },
   tick(dt) {
     this.dt = dt; this.now += dt;
+    if (this.storageNotice) this.placeNotice();
     const g = this.g;
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     try {
