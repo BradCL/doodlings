@@ -131,6 +131,8 @@ input.name:focus { box-shadow: 0 0 0 4px var(--sun), 0 10px 22px rgba(43,45,66,.
   .panel.snacks { grid-template-columns: repeat(4, auto); }
   .thumb { width: 60px; height: 60px; }
   .swatch { width: 34px; height: 34px; }
+  .row.palette { display: grid; grid-template-columns: repeat(6, auto); justify-content: center; gap: 16px 18px; padding-bottom: 8px; }   /* two rows of six: room for the chosen ring */
+  .thumbs { padding: 6px; }   /* room for the chosen voice's ring */
   .tray { padding: 10px; border-radius: 26px; }
   .drawer { bottom: calc(92px + var(--sab)); }
 }
@@ -153,6 +155,7 @@ input.name:focus { box-shadow: 0 0 0 4px var(--sun), 0 10px 22px rgba(43,45,66,.
   .btn.cat { --btn: 36px; }
   .row.tools, .row.parts { height: 66px; }
   .swatch { width: 30px; height: 30px; }
+  .row.palette { gap: 13px 16px; padding-bottom: 4px; }   /* the square keeps its size */
 }
 @media (max-height: 520px) and (min-width: 600px) {
   .tray { flex-direction: row; align-items: center; width: min(900px, calc(100% - 20px)); padding: 8px 12px; }
@@ -262,13 +265,32 @@ input.tag.pulse { animation: pulse 1.5s ease-in-out infinite; box-shadow: 0 0 0 
 @media (max-width: 520px) { .thumb.prize { width: 64px; height: 64px; } .thumb.prize canvas { transform: scale(.9); } .cupbar { gap: 8px; padding: 8px; } .cupbar .btn.go { --btn: 60px; } }
 @media (max-width: 380px) { .thumb.prize { width: 58px; height: 58px; } .thumb.prize canvas { transform: scale(.82); } .cupbar .packs { gap: 5px; } }
 
-/* ----- the growing moment ----- */
+/* ----- opening a gift: try the looks on ----- */
 .overlay.moment { z-index: 45; }
-.lookpick { display: flex; gap: 18px; align-items: center; animation: pop .5s cubic-bezier(.3,1.4,.5,1); }
-.thumb.look { width: auto; height: auto; padding: 10px; border-radius: 30px; background: var(--card); box-shadow: 0 6px 0 rgba(43,45,66,.2), 0 18px 40px rgba(0,0,0,.3); touch-action: manipulation; }
-.thumb.look.new { animation: lookglow 1.5s ease-in-out infinite; }
-@keyframes lookglow { 0%,100% { box-shadow: 0 0 0 5px var(--sun), 0 0 0 0 rgba(255,201,40,.7), 0 18px 40px rgba(0,0,0,.3); } 50% { box-shadow: 0 0 0 5px var(--sun), 0 0 0 18px rgba(255,201,40,0), 0 18px 40px rgba(0,0,0,.3); transform: scale(1.04); } }
-@media (max-width: 380px) { .lookpick { gap: 10px; } .thumb.look { padding: 6px; border-radius: 22px; } }
+.giftopen { display: grid; justify-items: center; gap: 12px; animation: pop .5s cubic-bezier(.3,1.4,.5,1); }
+.giftwait { display: flex; align-items: flex-end; gap: 6px; min-height: 46px; }
+.giftwait canvas.later { opacity: .9; }
+.thumb.look { width: auto; height: auto; padding: 6px; border-radius: 24px; background: var(--card); box-shadow: 0 5px 0 rgba(43,45,66,.18), 0 14px 30px rgba(0,0,0,.25); touch-action: manipulation; }
+.thumb.look.on { box-shadow: 0 0 0 4px var(--ink), 0 5px 0 rgba(43,45,66,.18); }
+.thumb.look.big { padding: 8px; border-radius: 32px; border: 5px solid var(--sun); cursor: default; }
+.thumb.look.big:active { transform: none; }
+.lookgrid { display: grid; grid-template-columns: repeat(2, auto); gap: 10px; }
+.giftbtns { display: flex; gap: 48px; align-items: center; margin-top: 2px; }
+.giftwrap { --btn: 60px; }
+.giftbtns .btn.primary { --btn: 68px; }
+.giftopen.side { grid-template-columns: auto auto; grid-template-areas: "big wait" "big grid" "big btns"; column-gap: 24px; row-gap: 8px; align-items: center; }
+.giftopen.side .giftwait { grid-area: wait; min-height: 0; align-self: end; }
+.giftopen.side .thumb.look.big { grid-area: big; }
+.giftopen.side .lookgrid { grid-area: grid; gap: 8px; }
+.giftopen.side .giftbtns { grid-area: btns; gap: 32px; align-self: start; padding-top: 4px; }
+.giftopen.side .giftbtns .btn.primary { --btn: 58px; }
+.giftopen.side .giftwrap { --btn: 52px; }
+/* the gift chip: how many gifts wait. A small picture with a finger-sized target round it */
+.giftchip { position: absolute; z-index: 20; width: 44px; height: 44px; padding: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; display: none; }
+.giftchip canvas { display: block; pointer-events: none; }
+.giftchip:active { transform: scale(.9); }
+/* the sparkle tab in the studio, with a gift waiting: the same small gift is its "new" mark */
+.btn .giftmark { position: absolute; top: -6px; right: -6px; pointer-events: none; }
 
 /* ----- the keepsake card: which code is showing ----- */
 .qrkind { position: absolute; top: calc(18px + var(--sat)); left: 50%; margin-left: -32px; width: 64px; height: 64px; border-radius: 50%; background: var(--sun); color: var(--ink); display: grid; place-items: center; box-shadow: 0 5px 0 #D99A00; }
@@ -1989,10 +2011,11 @@ PartsExtra.foot = _pxPart({
   layer: 'back',
   size: 0.45,
   tint: 'body',
-  slots: [[-151, 0.95], [151, 0.95], [-174, 1], [174, 1]],
+  slots: [[-151, 0.95], [151, 0.95], [-165, 1], [165, 1]],
   orient: true,
   swing: 0.3,
   paint(g, o) {
+    g.scale(-1, 1);   // toes drawn on the right, so they point outward under the body
     _pxShape(g, 'M-.22 .3 L-.25 -.29 C-.52 -.34 -.57 -.69 -.36 -.82 C-.15 -.98 .3 -.87 .38 -.66 C.47 -.48 .25 -.26 .23 .3 Z', o.fill, o.ink);
     _pxShape(g, 'M-.43 -.43 Q-.16 -.5 .35 -.42 Q.27 -.25 .23 .3 L-.22 .3 L-.25 -.29 Q-.4 -.29 -.43 -.43', o.lo);
     _pxLine(g, 'M-.2 -.8 L-.23 -.65 M.02 -.8 L.01 -.65', o);
@@ -2715,10 +2738,11 @@ PartsExtra.skate = _pxPart({
   layer: 'back',
   size: 0.52,
   tint: '#FDFEFF',
-  slots: [[-151, 0.95], [151, 0.95], [-174, 1], [174, 1]],
+  slots: [[-151, 0.95], [151, 0.95], [-165, 1], [165, 1]],
   orient: true,
   swing: 0.25,
   paint(g, o) {
+    g.scale(-1, 1);   // toes drawn on the right, so they point outward under the body
     const b = o.body||o.fill;
     _pxShape(g, 'M-.2 .3 L-.22 -.3 L.2 -.3 L.2 .3 Z', b, inkOf(b));
     _pxShape(g, 'M-.56 -1.0 L.34 -1.0 M-.34 -.86 L-.34 -1.0 M.16 -.86 L.16 -1.0', null, '#6B6F8C');
@@ -3376,9 +3400,12 @@ class Critter {
     // a grown look brings its crest: worked out here, drawn like a part, never saved among the child's own parts
     const L = LOOKS[this.look], o = this.d.outline;
     this._look = this.look;
-    this.gp = !L || !this.m ? [] : L.crest.map(([k, deg, dist]) => {
+    // the child may have moved it ([x, y, size, turn]) or taken it off (0): that is kept with the look
+    const moved = this.d.grow && this.d.grow.crest ? this.d.grow.crest[this.look] : undefined;
+    this.gp = !L || !this.m || moved === 0 ? [] : L.crest.map(([k, deg, dist]) => {
+      if (Array.isArray(moved)) return { k, x: moved[0], y: moved[1], s: moved[2], r: moved[3], c: null, crest: true };
       const a = (deg * Math.PI) / 180, dx = Math.sin(a), dy = -Math.cos(a), e = Shape.edgeAt(o, this.m.cx, this.m.cy, dx, dy) || this.m.r;
-      return { k, x: this.m.cx + dx * e * dist, y: this.m.cy + dy * e * dist, s: 1, r: PARTS[k].orient ? a : 0, c: null };
+      return { k, x: this.m.cx + dx * e * dist, y: this.m.cy + dy * e * dist, s: 1, r: PARTS[k].orient ? a : 0, c: null, crest: true };
     });
     const parts = this.d.parts.concat(this.gp);
     this.swing.length = parts.length;
@@ -3816,7 +3843,7 @@ const PRIZES = [
 ];
 
 const Grow = (() => {
-  const blank = () => ({ xp: [0, 0, 0], diet: [0, 0, 0, 0], eat: {}, fed: [], seen: [], looks: [], look: 0, stage: 0, tickets: 0, own: [], off: [], cups: [0, 0, 0] });
+  const blank = () => ({ xp: [0, 0, 0], diet: [0, 0, 0, 0], eat: {}, fed: [], seen: [], looks: [], look: 0, stage: 0, tickets: 0, own: [], off: [], cups: [0, 0, 0], gifts: [], crest: {} });
   const of = (d) => d.grow || (d.grow = blank());
   const level = (xp) => LEVEL_XP.filter((t) => xp >= t).length;
   const levels = (d) => of(d).xp.map(level);
@@ -3839,6 +3866,14 @@ const Grow = (() => {
     B.own = list(G.own, (k) => PRIZES.some((p) => p.k === k));
     B.off = list(G.off, (k) => B.own.includes(k));
     B.cups = B.cups.map((_, i) => num(G.cups && G.cups[i], 3) | 0);
+    // a crest the child moved ([x, y, size, turn] on the drawing square) or took off (0), by look
+    if (G.crest && typeof G.crest === 'object') for (const k in G.crest) {
+      const i = +k, v = G.crest[k];
+      if (!(Number.isInteger(i) && i > 0 && i < LOOKS.length)) continue;
+      if (v === 0) B.crest[i] = 0;
+      else if (Array.isArray(v) && v.length === 4 && v.every(Number.isFinite)) B.crest[i] = [clamp(v[0], -0.1, 1.1), clamp(v[1], -0.1, 1.1), clamp(v[2], 0.4, 3.2), wrapAngle(v[3])];
+    }
+    B.gifts = (Array.isArray(G.gifts) ? G.gifts : []).filter((f) => Number.isInteger(f) && f >= 0 && f <= 3).slice(0, LOOK_AT.length);
     d.grow = B;
     const best = {};
     if (d.best && typeof d.best === 'object') for (const k in d.best) if (/^[a-z]+\.[a-z]+\.[1-3]$/.test(k)) best[k] = num(d.best[k], 5) | 0;
@@ -3880,27 +3915,31 @@ const Grow = (() => {
     G.xp = G.xp.map((v, i) => Math.min(30, v + gain[i]));
     const tickets = Math.min(99 - G.tickets, o.tickets || 0);
     G.tickets += tickets;
-    return { gain, meals, before, after: levels(d), tickets, had: G.tickets - tickets };
+    // enough pips for a look: it arrives as a gift, wrapped, and waits until the child opens it
+    let gift = -1;
+    while (G.stage < LOOK_AT.length && total(d) >= LOOK_AT[G.stage]) { gift = family(d); G.gifts.push(gift); G.stage++; }
+    return { gain, meals, before, after: levels(d), tickets, had: G.tickets - tickets, gift };
   }
 
   // ----- looks -----
-  function nextLook(d) {
+  // what it has been eating most (0 hop, 1 steady, 2 puff, 3 wild). Never fed: what it has practised most.
+  function family(d) {
     const G = of(d), eaten = G.diet.reduce((a, b) => a + b, 0);
-    // the foods it has been eating, most first. Never fed: go by what it has practised most.
-    const order = eaten >= 1 ? [0, 1, 2, 3].sort((a, b) => G.diet[b] - G.diet[a]) : [0, 1, 2].sort((a, b) => G.xp[b] - G.xp[a]);
-    const [a, b] = order, both = eaten >= 1 && a < 3 && b < 3 && G.diet[b] >= G.diet[a] * 0.6;
-    const find = (fams) => LOOKS.findIndex((L) => L && L.from.length === fams.length && fams.every((f) => L.from.includes(f)));
-    const tries = [both ? find([a, b]) : 0, find([a]), find([b]), ...LOOKS.map((_, i) => i)];
-    return tries.find((i) => i > 0 && !G.looks.includes(i)) || 0;
+    return eaten >= 1 ? [0, 1, 2, 3].sort((a, b) => G.diet[b] - G.diet[a])[0] : [0, 1, 2].sort((a, b) => G.xp[b] - G.xp[a])[0];
   }
-  // the look it is ready to grow right now (0 = none)
-  const pending = (d) => { const G = of(d); return !d.guest && G.stage < LOOK_AT.length && total(d) >= LOOK_AT[G.stage] ? nextLook(d) : 0; };
-  // The child has chosen. Either way the look is kept for later; wear = put it on now.
-  function settle(d, look, wear) {
+  // What is inside a gift: up to three looks it has not grown yet, those from the gift's own food first.
+  function inside(d, fam) {
+    const G = of(d), fresh = LOOKS.map((_, i) => i).filter((i) => i > 0 && !G.looks.includes(i));
+    const mine = fresh.filter((i) => LOOKS[i].from.includes(fam)).sort((a, b) => LOOKS[a].from.length - LOOKS[b].from.length);
+    return [...mine, ...fresh.filter((i) => !mine.includes(i))].slice(0, 3);
+  }
+  // The child opened gift n and chose a look: it is theirs to keep, and they wear it now.
+  function unwrap(d, n, look) {
     const G = of(d);
-    G.stage = Math.min(LOOK_AT.length, G.stage + 1);
+    if (!(n >= 0 && n < G.gifts.length)) return;
+    G.gifts.splice(n, 1);
     if (look && !G.looks.includes(look)) G.looks.push(look);
-    if (look && wear) G.look = look;
+    if (look) G.look = look;
   }
 
   // ----- prizes -----
@@ -3916,7 +3955,7 @@ const Grow = (() => {
   }
   function toggle(d, k) { const G = of(d), i = G.off.indexOf(k); if (i >= 0) G.off.splice(i, 1); else G.off.push(k); }
 
-  return { of, clean, level, levels, total, favourite, feed, earn, pending, settle, owns, shows, buy, toggle };
+  return { of, clean, level, levels, total, favourite, feed, earn, family, inside, unwrap, owns, shows, buy, toggle };
 })();
 
 // ---------- the pictures for all of that ----------
@@ -4039,7 +4078,7 @@ function drawNameTag(g, name, x, y, size, alpha = 1) {
 // Drawn in body units: (0, 0) is the middle of the body, b is the box the body fits in.
 const LookMarks = {
   coil(g, b, col) {                                        // hoops round the lower half, like a spring
-    g.strokeStyle = col.lo; g.lineWidth = b.h * 0.075; g.lineCap = 'round';
+    g.strokeStyle = shade(col.fill, -0.32); g.lineWidth = b.h * 0.095; g.lineCap = 'round';
     for (let i = 0; i < 3; i++) { const y = b.y0 + b.h * (0.5 + i * 0.17); g.beginPath(); g.moveTo(b.x0 - 0.1, y - b.h * 0.05); g.quadraticCurveTo(b.cx, y + b.h * 0.14, b.x1 + 0.1, y - b.h * 0.05); g.stroke(); }
   },
   ember(g, b, col, r, t) {                                 // flames licking up from the bottom
@@ -4053,15 +4092,15 @@ const LookMarks = {
       g.lineTo(b.x1 + 0.2, b.y1 + 0.2); g.closePath(); g.fill();
     }
   },
-  frost(g, b, col, r) {                                    // a frosty top and a scatter of snowflakes
-    const gr = g.createLinearGradient(0, b.y0, 0, b.y0 + b.h * 0.5); gr.addColorStop(0, 'rgba(255,255,255,0.6)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = gr; g.fillRect(b.x0, b.y0, b.w, b.h * 0.5);
-    g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineCap = 'round';
+  frost(g, b, col, r) {                                    // a frosty top and a scatter of snowflakes, ice-blue so they show on any colour
+    const gr = g.createLinearGradient(0, b.y0, 0, b.y0 + b.h * 0.55); gr.addColorStop(0, 'rgba(190,232,255,0.75)'); gr.addColorStop(1, 'rgba(190,232,255,0)');
+    g.fillStyle = gr; g.fillRect(b.x0, b.y0, b.w, b.h * 0.55);
+    g.lineCap = 'round';
     for (let i = 0; i < 9; i++) {
-      const x = b.x0 + b.w * (0.1 + r() * 0.8), y = b.y0 + b.h * (0.12 + r() * 0.76), s = b.h * (0.035 + r() * 0.035), a0 = r() * 1;
-      g.lineWidth = s * 0.34; g.beginPath();
-      for (let k = 0; k < 3; k++) { const a = a0 + (k / 3) * Math.PI; g.moveTo(x - Math.cos(a) * s, y - Math.sin(a) * s); g.lineTo(x + Math.cos(a) * s, y + Math.sin(a) * s); }
-      g.stroke();
+      const x = b.x0 + b.w * (0.1 + r() * 0.8), y = b.y0 + b.h * (0.12 + r() * 0.76), s = b.h * (0.045 + r() * 0.035), a0 = r() * 1;
+      const flake = () => { g.beginPath(); for (let k = 0; k < 3; k++) { const a = a0 + (k / 3) * Math.PI; g.moveTo(x - Math.cos(a) * s, y - Math.sin(a) * s); g.lineTo(x + Math.cos(a) * s, y + Math.sin(a) * s); } g.stroke(); };
+      g.strokeStyle = INK; g.lineWidth = s * 0.5; flake();                // white flakes in the one ink outline: they show on any colour, blue too
+      g.strokeStyle = '#FFFFFF'; g.lineWidth = s * 0.24; flake();
     }
   },
   party(g, b, col, r) {                                    // confetti that never came off
@@ -4072,28 +4111,29 @@ const LookMarks = {
       else { g.save(); g.translate(x, y); g.rotate(r() * TAU); g.beginPath(); g.roundRect(-s * 1.5, -s * 0.55, s * 3, s * 1.1, s * 0.4); g.fill(); g.restore(); }
     }
   },
-  comet(g, b, col, r) {                                    // a streak of light, and stars
-    g.fillStyle = rgba(col.hi, 0.8);
+  comet(g, b, col, r) {                                    // a golden streak of light, and stars
+    g.fillStyle = 'rgba(255,243,180,0.72)';
     g.beginPath(); g.moveTo(b.x0 - 0.2, b.y0 + b.h * 0.78); g.quadraticCurveTo(b.cx, b.y0 + b.h * 0.5, b.x1 + 0.2, b.y0 + b.h * 0.04); g.lineTo(b.x1 + 0.2, b.y0 + b.h * 0.28); g.quadraticCurveTo(b.cx + b.w * 0.05, b.y0 + b.h * 0.72, b.x0 - 0.2, b.y0 + b.h * 1.02); g.closePath(); g.fill();
-    g.fillStyle = '#FFF6D0';
+    g.fillStyle = '#FFE680'; g.strokeStyle = INK; g.lineJoin = 'round';
     for (let i = 0; i < 6; i++) {
-      const x = b.x0 + b.w * (0.12 + r() * 0.76), y = b.y0 + b.h * (0.12 + r() * 0.76), s = b.h * (0.055 + r() * 0.05);
-      g.beginPath(); for (let k = 0; k < 8; k++) { const a = (k / 8) * TAU, rr = k % 2 ? s * 0.32 : s; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } g.closePath(); g.fill();
+      const x = b.x0 + b.w * (0.12 + r() * 0.76), y = b.y0 + b.h * (0.12 + r() * 0.76), s = b.h * (0.06 + r() * 0.05);
+      g.lineWidth = s * 0.16; g.beginPath(); for (let k = 0; k < 8; k++) { const a = (k / 8) * TAU, rr = k % 2 ? s * 0.32 : s; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } g.closePath(); g.fill(); g.stroke();
     }
   },
   marble(g, b, col) {                                      // swirls, like two colours stirred together
-    g.lineCap = 'round'; g.lineWidth = b.h * 0.07;
+    g.lineCap = 'round'; g.lineWidth = b.h * 0.09;
     for (let i = 0; i < 4; i++) {
       const y = b.y0 + b.h * (0.16 + i * 0.23);
-      g.strokeStyle = i % 2 ? rgba(col.lo, 0.8) : rgba(col.hi, 0.85);
+      g.strokeStyle = i % 2 ? shade(col.fill, -0.3) : shade(col.fill, 0.5);
       g.beginPath(); g.moveTo(b.x0 - 0.1, y); g.bezierCurveTo(b.x0 + b.w * 0.3, y - b.h * 0.22, b.x0 + b.w * 0.62, y + b.h * 0.22, b.x1 + 0.1, y - b.h * 0.06); g.stroke();
     }
   },
   bubble(g, b, col, r) {                                   // bubbles all the way through
     for (let i = 0; i < 11; i++) {
       const x = b.x0 + b.w * (0.08 + r() * 0.84), y = b.y0 + b.h * (0.08 + r() * 0.84), s = b.h * (0.04 + r() * 0.06);
-      g.fillStyle = 'rgba(255,255,255,0.2)'; g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = s * 0.26;
+      g.fillStyle = 'rgba(210,240,255,0.35)'; g.strokeStyle = INK; g.lineWidth = s * 0.2;
       g.beginPath(); g.arc(x, y, s, 0, TAU); g.fill(); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = s * 0.14; g.beginPath(); g.arc(x, y, s * 0.82, 3.6, 4.6); g.stroke();
       g.fillStyle = 'rgba(255,255,255,0.9)'; g.beginPath(); g.arc(x - s * 0.36, y - s * 0.36, s * 0.2, 0, TAU); g.fill();
     }
   },
@@ -4178,23 +4218,111 @@ const GrownParts = {
 Object.assign(PARTS, GrownParts);
 PART_TRAYS.prize = PRIZES.filter((p) => p.part).map((p) => p.k);   // the lab shows these in their own room
 
+// ---------- a gift: a look it has earned, not opened yet ----------
+// Coloured by the food that grew it. lid (0..1) lifts the lid off; drawn in a box 2r wide, sitting on y + r.
+const giftCol = (fam) => (fam === 3 ? WILD : QUALS[fam] ? QUALS[fam].col : '#FF9433');
+function drawGift(g, x, y, r, fam, lid = 0) {
+  const col = giftCol(fam), ink = inkOf(col), lo = shade(col, -0.18), rib = fam === 3 ? '#FFC928' : '#FFF3C4';
+  g.save(); g.translate(x, y); g.scale(r, r); g.lineJoin = g.lineCap = 'round'; g.lineWidth = 0.12; g.strokeStyle = ink;
+  g.fillStyle = 'rgba(43,45,66,0.16)'; g.beginPath(); g.ellipse(0, 1.0, 0.86, 0.12, 0, 0, TAU); g.fill();
+  g.fillStyle = col; g.beginPath(); g.roundRect(-0.74, -0.18, 1.48, 1.14, 0.1); g.fill(); g.stroke();       // the box
+  g.fillStyle = lo; g.beginPath(); g.roundRect(0.36, -0.12, 0.32, 1.02, 0.06); g.fill();                     // its shaded side
+  g.fillStyle = rib; g.fillRect(-0.15, -0.18, 0.3, 1.14); g.strokeRect(-0.15, -0.18, 0.3, 1.14);            // ribbon down the front
+  g.save(); g.translate(lid * 0.5, -lid * 0.9); g.rotate(lid * 0.5);
+  g.fillStyle = col; g.beginPath(); g.roundRect(-0.9, -0.52, 1.8, 0.42, 0.12); g.fill(); g.stroke();         // the lid, overhanging
+  g.fillStyle = lo; g.fillRect(-0.86, -0.2, 1.72, 0.07);                                                    // the lid's shadow on the box
+  g.fillStyle = rib; g.fillRect(-0.15, -0.52, 0.3, 0.42); g.strokeRect(-0.15, -0.52, 0.3, 0.42);
+  g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.roundRect(-0.78, -0.45, 0.52, 0.1, 0.05); g.fill();  // shine
+  for (const s of [-1, 1]) {                                                                                    // the bow: two loops and two tails
+    g.fillStyle = rib; g.beginPath(); g.moveTo(0, -0.52); g.bezierCurveTo(s * 0.24, -1.12, s * 0.86, -1.0, s * 0.6, -0.62); g.bezierCurveTo(s * 0.46, -0.48, s * 0.18, -0.5, 0, -0.52); g.fill(); g.stroke();
+    g.beginPath(); g.moveTo(s * 0.04, -0.5); g.lineTo(s * 0.34, -0.2); g.lineTo(s * 0.18, -0.18); g.closePath(); g.fill(); g.stroke();
+  }
+  g.beginPath(); g.arc(0, -0.56, 0.13, 0, TAU); g.fill(); g.stroke();
+  g.restore();
+  g.fillStyle = 'rgba(255,255,255,0.35)'; g.beginPath(); g.roundRect(-0.64, -0.06, 0.16, 0.8, 0.08); g.fill();  // shine down the box
+  g.restore();
+}
+// a four-pointed twinkle
+function drawTwinkle(g, x, y, r, a = 1) {
+  if (a <= 0) return;
+  g.save(); g.globalAlpha = a; g.fillStyle = '#FFF6C8'; g.strokeStyle = '#FFC928'; g.lineWidth = Math.max(1, r * 0.14);
+  g.beginPath(); for (let k = 0; k < 8; k++) { const ang = (k / 8) * TAU, rr = k % 2 ? r * 0.28 : r; g.lineTo(x + Math.cos(ang) * rr, y + Math.sin(ang) * rr); } g.closePath(); g.fill(); g.stroke();
+  g.restore();
+}
+
+// ---------- the gift chip: how many gifts wait, in the same place on every screen. A tap opens the first ----------
+// It lives just under the tickets on the growing card. Screens that show the card place it each frame; unplaced, it hides.
+const GiftChip = (() => {
+  let btn = null, g = null, cv = null, c = null, seen = 0, shown = -1, lastN = -1, bump = 0, hidden = 0;
+  const SZ = 44;
+  function build() {
+    btn = el('button', 'giftchip', App.ui); btn.type = 'button'; btn.setAttribute('aria-label', 'Gift');
+    [cv, g] = miniCanvas(SZ, btn);
+    btn.addEventListener('click', () => { Sound.unlock(); if (c && !Moment.isOpen) { Sound.sfx('page'); Moment.open(c); } });
+    setInterval(() => { if (btn.style.display === 'block' && performance.now() - seen > 250) btn.style.display = 'none'; }, 200);
+  }
+  // x, y: the middle of the chip. n: gifts waiting (the one in flight is not counted yet). t: a clock, for the twinkle.
+  function place(critter, x, y, n, t) {
+    if (!btn) build();
+    if (n <= 0 || !critter) { if (btn.style.display !== 'none') btn.style.display = 'none'; return; }
+    c = critter; seen = performance.now();
+    if (btn.style.display !== 'block') btn.style.display = 'block';
+    btn.style.left = Math.round(x - SZ / 2) + 'px'; btn.style.top = Math.round(y - SZ / 2) + 'px';
+    if (lastN >= 0 && n > lastN) bump = 1;
+    lastN = n; bump = Math.max(0, bump - 0.04);
+    const fam = Grow.of(c.d).gifts[0], tw = (t % 4.2) / 4.2;   // a twinkle now and then, not all the time
+    g.clearRect(0, 0, SZ, SZ);
+    const many = n > 1, k = 1 + Math.sin(bump * Math.PI) * 0.25;
+    g.fillStyle = 'rgba(255,253,248,0.96)'; g.strokeStyle = 'rgba(43,45,66,0.14)'; g.lineWidth = 1.5;
+    g.beginPath(); g.roundRect(many ? 3 : 7, 8, many ? SZ - 6 : SZ - 14, SZ - 16, (SZ - 16) / 2); g.fill(); g.stroke();
+    drawGift(g, many ? 15 : SZ / 2, SZ / 2 - 1, 9 * k, fam);
+    if (many) { g.fillStyle = INK; g.font = `800 15px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(n), 31, SZ / 2 + 1); }
+    if (tw < 0.16) { const a = Math.sin((tw / 0.16) * Math.PI); drawTwinkle(g, (many ? 15 : SZ / 2) + 9, 11, 5 * a + 1, a); drawTwinkle(g, (many ? 15 : SZ / 2) - 10, 25, 3 * a + 0.5, a * 0.8); }
+    btn.setAttribute('aria-label', 'Gift ' + n);
+  }
+  return { place, get el() { return btn; } };
+})();
+
 // ---------- the growing card: three abilities with five pips each, and the tickets ----------
 // Pinned in the fair. Everywhere else it drops in for a moment when something grows, then leaves.
 const GrowHud = (() => {
-  let d = null, rep = null, t = 0, hold = 0, pinned = false, amt = 0, wig = 0, plus = -1;
-  function show(dd, report) { if (!report) return; d = dd; rep = report; t = 0; hold = 5; if (report.tickets) Sound.sfx('sparkle', { gain: 0.5 }); }
+  let d = null, rep = null, t = 0, hold = 0, pinned = false, amt = 0, wig = 0, plus = -1, gift = null, clock = 0, hint = 0, opened = false;
+  // at: where on the screen it was earned (the doodling), so a gift can pop out there
+  function show(dd, report, at) {
+    if (!report) return; d = dd; rep = report; t = 0; hold = 5; if (report.tickets) Sound.sfx('sparkle', { gain: 0.5 });
+    if (report.gift >= 0) gift = { fam: report.gift, t: -0.9, x: at ? at.x : App.W / 2, y: at ? at.y : App.H * 0.62, done: false };
+  }
   function pin(dd) { pinned = !!dd; if (dd) { if (d !== dd) rep = null; d = dd; } }
   function hide() { hold = 0; rep = null; }
   function step(dt) {
-    const was = t; t += dt; hold -= dt; wig = Math.max(0, wig - dt * 2.5);
+    const was = t; t += dt; hold -= dt; wig = Math.max(0, wig - dt * 2.5); clock += dt;
+    if (gift) { const w = gift.t; gift.t += dt; if (w < 0 && gift.t >= 0) { Sound.sfx('boing', { gain: 0.4 }); Sound.sfx('sparkle', { gain: 0.5 }); } if (w < 1.2 && gift.t >= 1.2) Sound.sfx('whoosh', { gain: 0.35 }); if (gift.t >= 1.75) { gift = null; Sound.sfx('drop', { gain: 0.5 }); } }
     amt = damp(amt, pinned || hold > 0 ? 1 : 0, 10, dt);
     if (rep) {                                              // a pip lighting makes a sound, a little higher each time
       rep.gain.forEach((n, q) => { const at = 0.7 + q * 0.3; if (n && was < at && t >= at) Sound.sing(rep.after[q] > rep.before[q] ? 4 + q : q, { gain: 0.6 }); });
       if (t > 5) rep = null;
     }
   }
+  // The gift chip's home: under the tickets, where the card sits when it is showing (so it never moves).
+  // On a short (sideways) screen it hugs the card, so it stays out of the play area. A screen can give it a place of its own (home: under the fair button).
+  // Sideways (a short screen) it sits in the top corner beside the sound button, out of the play area.
+  function chipAt(W, top, at) {
+    if (at) return at;
+    if (App.H < 520) { const sb = document.querySelector('[aria-label="Sound"]'), r = sb && sb.getBoundingClientRect(), ur = App.ui.getBoundingClientRect(); if (r && r.width) return { x: r.left - ur.left - 34, y: r.top - ur.top + r.height / 2 }; }
+    const u = Math.min(1, (W - 128) / 262), w = 262 * u, h = 52 * u, x = (W - w) / 2; return { x: x + 236 * u, y: top + h + 44, u };
+  }
   // top = the y the card sits at. Its width shrinks to leave the corner buttons clear.
-  function draw(g, W, top = 12) {
+  // c: the doodling on this screen. Without it there is no gift chip (it is mid-game, or a screen with nowhere for it).
+  function draw(g, W, top = 12, c = null, spot = null) {
+    const dd = c ? c.d : d;
+    if (dd && !dd.guest) {
+      const G = Grow.of(dd), home = chipAt(W, top, spot), n = G.gifts.length - (gift ? 1 : 0);
+      GiftChip.place(c, home.x, home.y, Moment.isOpen ? 0 : n, clock);
+      if (gift) drawArrival(g, home);
+      // the first time only, until a gift has been opened: a finger shows that the chip opens
+      if (c && n > 0 && !gift && !opened && !G.looks.length && !Moment.isOpen) { hint += App.dt || 0.016; if (hint > 4) { const u2 = ((hint - 4) % 2.2) / 2.2, a = u2 < 0.1 ? u2 * 10 : u2 > 0.85 ? (1 - u2) / 0.15 : 1, press = u2 > 0.35 && u2 < 0.6 ? 1 : 0; drawTouchDot(g, home.x + 10, home.y + 22 - (press ? 0 : 12), press ? 0.7 : 0, a); } }
+      else hint = 0;
+    }
     if (amt < 0.01 || !d) return;
     const G = Grow.of(d), u = Math.min(1, (W - 128) / 262), w = 262 * u, h = 52 * u, x = (W - w) / 2 + Math.sin(wig * 22) * wig * 7, y = top - (1 - amt) * (h + top + 12);
     g.save();
@@ -4232,21 +4360,41 @@ const GrowHud = (() => {
     }
     g.restore();
   }
-  return { show, pin, hide, step, draw, shake: () => { wig = 1; }, boost: (q) => { plus = q; }, get busy() { return !!rep; } };
+  // The gift's arrival: it pops out by the doodling with a sparkle, gives a little shake, then flies to its home.
+  function drawArrival(g, home) {
+    const k = gift.t, r = 24;
+    if (k < 0) return;
+    let x = gift.x + r * 2.2, y = gift.y - r * 1.2, s = 1, rot = 0;
+    if (k < 0.3) s = ease.out(k / 0.3) * 1.15;                          // pop
+    else if (k < 0.45) s = lerp(1.15, 1, (k - 0.3) / 0.15);
+    if (k >= 0.45 && k < 1.2) rot = Math.sin((k - 0.45) * 26) * 0.22 * (1 - (k - 0.45) / 0.75);   // a little shake
+    if (k >= 1.2) {                                                                                  // and up to its home
+      const u = ease.inOut(clamp01((k - 1.2) / 0.55));
+      for (let i = 1; i <= 5; i++) { const v = Math.max(0, u - i * 0.07); g.fillStyle = `rgba(255,201,40,${0.7 - i * 0.12})`; g.beginPath(); g.arc(lerp(x, home.x, v), lerp(y, home.y, v) - Math.sin(v * Math.PI) * 40, 3, 0, TAU); g.fill(); }
+      x = lerp(x, home.x, u); y = lerp(y, home.y, u) - Math.sin(u * Math.PI) * 40; s = lerp(1, 0.5, u);
+    }
+    if (k < 0.9) for (let i = 0; i < 5; i++) { const a = (i / 5) * TAU + k * 2, d0 = r * (1.3 + k * 1.4); drawTwinkle(g, x + Math.cos(a) * d0, y + Math.sin(a) * d0 * 0.8, 5 * (1 - k / 0.9) + 1, 1 - k / 0.9); }
+    g.save(); g.translate(x, y + r); g.rotate(rot); drawGift(g, 0, -r, r * s, gift.fam); g.restore();
+  }
+  return { show, pin, hide, step, draw, shake: () => { wig = 1; }, boost: (q) => { plus = q; }, opened: () => { opened = true; }, get busy() { return !!rep; } };
 })();
 
-// ---------- the growing moment: "as I am" beside "the new look", and the child picks ----------
+// ---------- opening a gift: the doodling tries the looks on, and the child picks one, or wraps it back up ----------
 const Moment = (() => {
-  let root, box, btns = [], c = null, look = 0, done = null;
+  let root, box, waitRow, big, grid, wrapBtn, wearBtn, c = null, choices = [], sel = 0, done = null;
   function build() {
     root = el('div', 'overlay moment', App.ui);
-    root.setAttribute('role', 'dialog'); root.setAttribute('aria-label', 'Grow');
-    box = el('div', 'lookpick', root);
-    ['Stay as I am', 'New look'].forEach((label, i) => {
-      const b = el('button', 'thumb look' + (i ? ' new' : ''), box); b.type = 'button'; b.setAttribute('aria-label', label);
-      b.addEventListener('click', () => { Sound.unlock(); choose(!!i); });
-      btns.push(b);
-    });
+    root.setAttribute('role', 'dialog'); root.setAttribute('aria-label', 'Gift');
+    root.addEventListener('click', (e) => { if (e.target === root) close(false); });     // a tap outside: not now
+    box = el('div', 'giftopen', root);
+    waitRow = el('div', 'giftwait', box);
+    big = el('div', 'thumb look big', box);
+    grid = el('div', 'lookgrid', box);
+    const row = el('div', 'giftbtns', box);
+    wrapBtn = el('button', 'btn giftwrap', row); wrapBtn.type = 'button'; wrapBtn.setAttribute('aria-label', 'Not now');
+    wrapBtn.addEventListener('click', () => { Sound.unlock(); close(false); });
+    wearBtn = el('button', 'btn primary', row, ICONS.check); wearBtn.type = 'button'; wearBtn.setAttribute('aria-label', 'Wear this');
+    wearBtn.addEventListener('click', () => { Sound.unlock(); if (!choices[sel]) { wiggle(wearBtn); Sound.sfx('error'); return; } close(true); });
   }
   // a doodling drawn into a button, wearing one look (the look is put back afterwards)
   function portrait(b, cr, lk, size) {
@@ -4262,19 +4410,45 @@ const Moment = (() => {
     k.draw(g);
     G.look = was;
   }
-  function open(critter, lk, then) {
+  const side = () => App.W > App.H * 1.25;   // sideways: the doodling on the left, the choices and buttons on the right
+  function pick(i) {
+    sel = i;
+    const bs = Math.round(side() ? clamp(App.H * 0.56, 150, 300) : clamp(Math.min(App.W * 0.5, App.H * 0.28), 140, 240));
+    portrait(big, c, choices[sel], bs);
+    big.style.borderColor = giftCol(Grow.of(c.d).gifts[0]);
+    grid.querySelectorAll('.thumb').forEach((x, j) => x.classList.toggle('on', j === sel));
+    wearBtn.classList.toggle('dim', !choices[sel]);
+  }
+  // Opens the first gift waiting. then(wore) runs when it closes.
+  function open(critter, then) {
+    const G = Grow.of(critter.d);
+    if (!G.gifts.length || critter.d.guest) return false;
     if (!root) build();
-    c = critter; look = lk; done = then;
-    const size = Math.round(clamp(Math.min(App.W * 0.4, App.H * 0.42), 120, 250));
-    portrait(btns[0], c, Grow.of(c.d).look, size); portrait(btns[1], c, look, size);
+    c = critter; done = then || null;
+    choices = [0, ...Grow.inside(c.d, G.gifts[0])];
+    // the gift being opened, lid off, and any others still waiting beside it
+    waitRow.replaceChildren();
+    const sm = side() ? 0.7 : 1;   // sideways there is less height: smaller, and the lid stays on (the gift button already shows which one)
+    G.gifts.forEach((fam, i) => { const s0 = (i ? 34 : 60) * sm, [, g] = miniCanvas(s0, waitRow, i ? 'later' : 'now'); drawGift(g, s0 / 2, s0 * 0.52, s0 * (i ? 0.37 : 0.33), fam, i || side() ? 0 : 1); });
+    wrapBtn.replaceChildren(); { const [, g] = miniCanvas(40, wrapBtn); drawGift(g, 20, 20, 13, G.gifts[0]); }
+    // as it is, and what is inside: tap one and the doodling tries it on
+    grid.replaceChildren();
+    const ts = Math.round(side() ? clamp((App.H - 190) / 2.3, 60, 112) : clamp(Math.min(App.W * 0.24, App.H * 0.13), 70, 112));
+    box.classList.toggle('side', side());
+    choices.forEach((lk, i) => {
+      const b = el('button', 'thumb look', grid); b.type = 'button'; b.setAttribute('aria-label', lk ? 'look-' + LOOKS[lk].k : 'look-drawn');
+      portrait(b, c, lk, ts);
+      b.addEventListener('click', () => { Sound.unlock(); Sound.sfx(lk ? 'sparkle' : 'tap'); pick(i); });
+    });
+    pick(choices.length > 1 ? 1 : 0);
     root.classList.add('on');
     Sound.sfx('magic'); Sound.sfx('grow', { gain: 0.5 });
+    return true;
   }
-  function choose(wear) {
-    Grow.settle(c.d, look, wear);
+  function close(wear) {
     root.classList.remove('on');
-    c.refreshParts(); App.keep(c);
-    Sound.sfx(wear ? 'rainbow' : 'tap'); if (wear) Sound.sfx('confetti', { gain: 0.6 });
+    if (wear) { Grow.unwrap(c.d, 0, choices[sel]); GrowHud.opened(); c.refreshParts(); App.keep(c); Sound.sfx('rainbow'); Sound.sfx('confetti', { gain: 0.6 }); }
+    else Sound.sfx('tap');
     if (done) done(wear);
   }
   return { open, portrait, hold: false, get isOpen() { return !!root && root.classList.contains('on'); } };
@@ -4356,6 +4530,10 @@ const Codec = (() => {
       b.push(...G.diet.map((v) => u8(v * 20)), mask(G.seen, FOODS), G.looks.reduce((m, i) => m | (1 << (i - 1)), 0), G.stage, G.tickets,
         own & 255, own >> 8, off & 255, off >> 8, G.cups[0] | (G.cups[1] << 2) | (G.cups[2] << 4), ...[0, 1, 2].map((i) => FOODS.indexOf(G.fed[i]) & 255));
       for (let i = 0; i < BESTS.length; i += 2) b.push(((d.best && d.best[BESTS[i]]) || 0) | (((d.best && d.best[BESTS[i + 1]]) || 0) << 4));
+      b.push(G.gifts.length, ...G.gifts);                 // gifts not opened yet (added 2026-11-13: older copies stop reading before this)
+      const cr = Object.keys(G.crest).map(Number);         // crests moved or taken off, by look (added 2026-11-14)
+      b.push(cr.length);
+      for (const i of cr) { const v = G.crest[i]; b.push(i, ...(v ? [u8((v[0] + 0.1) * 200), u8((v[1] + 0.1) * 200), u8(v[2] * 60), u8(((wrapAngle(v[3]) + Math.PI) / TAU) * 255)] : [255, 0, 0, 0])); }
     }
     return Uint8Array.from(b);
   }
@@ -4427,6 +4605,8 @@ const Codec = (() => {
             G.fed = [rd(), rd(), rd()].map((i) => FOODS[i]).filter(Boolean);
             if (fav) G.eat[fav] = 3;
             for (let i = 0; i < BESTS.length; i += 2) { const v = rd(); if (v & 15) d.best[BESTS[i]] = v & 15; if (v >> 4) d.best[BESTS[i + 1]] = v >> 4; }
+            if (k < b.length) { const n = rd(); G.gifts = []; for (let i = 0; i < n; i++) G.gifts.push(rd()); }
+            if (k < b.length) { const n = rd(); G.crest = {}; for (let i = 0; i < n; i++) { const lk = rd(), x = rd(), y = rd(), sz = rd(), r = rd(); G.crest[lk] = x === 255 ? 0 : [x / 200 - 0.1, y / 200 - 0.1, sz / 60, (r / 255) * TAU - Math.PI]; } }
           }
         } catch (e) { /* a cut-off ending: keep the doodling, with whatever was read */ }
       }
@@ -4538,7 +4718,8 @@ const Studio = (() => {
   }
 
   function layout() {
-    const top = 78, bottom = App.H - 12 - (tray.offsetHeight || 170);   // offsetHeight: not fooled by the tray's entrance animation
+    const bar = root.firstChild, top = bar.offsetHeight ? bar.offsetTop + bar.offsetHeight + 6 : 78;   // just below the top bar: 78 wherever it is 72 tall
+    const bottom = App.H - 12 - (tray.offsetHeight || 170);   // offsetHeight: not fooled by the tray's entrance animation
     const avail = bottom - top;
     sq.s = Math.max(140, Math.min(App.W - 20, avail - 8, 760));
     sq.x = (App.W - sq.s) / 2; sq.y = top + (avail - sq.s) / 2;
@@ -4550,7 +4731,7 @@ const Studio = (() => {
     c.grab = null; c.kin = null; c.fx = {}; c.scT = 1; c.sc = 1; c.scv = 0; c.ang = 0; c.q = 0; c.qv = 0; c.asleep = false; c.mood = 'idle'; c.lookAt = null; c.mouthHold = 0;
     st.undo = []; st.sel = -1; st.stroke = null; st.paint = null; st.drag = null; st.erase = false; st.idle = 0;
     st.color = d.color;
-    if (st.cat === 'look' && !Grow.of(d).looks.length) st.cat = 'eyes';
+    if (st.cat === 'look' && !Grow.of(d).looks.length && !Grow.of(d).gifts.length) st.cat = 'eyes';
     root.classList.add('on');
     setStep(d.outline ? (d.awake ? 2 : 1) : 0, true);
     layout();
@@ -4574,7 +4755,12 @@ const Studio = (() => {
     sizeBtns.forEach((b, i) => b.classList.toggle('on', i === st.size && !st.erase));
     eraserBtn.classList.toggle('on', st.erase);
     catBtns.forEach((b, i) => b.classList.toggle('on', CATS[i][0] === st.cat));
-    catBtns[5].style.display = Grow.of(d).looks.length ? '' : 'none';
+    const G = Grow.of(d), lookBtn = catBtns[5];
+    lookBtn.style.display = G.looks.length || G.gifts.length ? '' : 'none';
+    // a gift waiting: the same small gift sits on the sparkle button, as its "new" mark
+    let mark = lookBtn.querySelector('.giftmark');
+    if (G.gifts.length && !d.guest) { if (!mark) { lookBtn.style.position = 'relative'; const [cv, g] = miniCanvas(24, lookBtn, 'giftmark'); drawGift(g, 12, 11, 8, G.gifts[0]); mark = cv; } }
+    else if (mark) mark.remove();
     nextBtn.classList.toggle('dim', !d.outline);
     setIcon(nextBtn, st.step < 2 ? 'next' : d.awake ? 'check' : 'spark');
     nextBtn.classList.toggle('glow', st.step === 2 && !d.awake);
@@ -4586,11 +4772,17 @@ const Studio = (() => {
     thumbs.innerHTML = ''; thumbs.scrollLeft = 0;
     if (st.cat === 'look') {                                // as it was drawn, and every look it has grown: tap to wear
       const G = Grow.of(d);
+      if (G.gifts.length && !d.guest) {                    // a gift waiting comes first: tap to open it here
+        const b = el('button', 'thumb lookthumb gift', thumbs); b.type = 'button'; b.setAttribute('aria-label', 'Gift');
+        const [, g] = miniCanvas(54, b); drawGift(g, 27, 25, 17, G.gifts[0]);
+        b.addEventListener('click', () => { Sound.unlock(); Moment.open(c, () => { thumbCat = null; c.qv += 3; syncTools(); }); });
+      }
       for (const lk of [0, ...G.looks]) {
         const b = el('button', 'thumb lookthumb' + (G.look === lk ? ' on' : ''), thumbs); b.type = 'button'; b.setAttribute('aria-label', lk ? 'look-' + LOOKS[lk].k : 'look-drawn');
         Moment.portrait(b, c, lk, 54);
         b.addEventListener('click', () => {
-          Sound.unlock(); G.look = lk; c.refreshParts(); c.qv += 3; Sound.sfx(lk ? 'sparkle' : 'tap');
+          Sound.unlock(); if (lk && G.look === lk) delete G.crest[lk];   // tapping the look it already wears puts its crest back where it grew
+          G.look = lk; c.refreshParts(); c.qv += 3; Sound.sfx(lk ? 'sparkle' : 'tap');
           thumbs.querySelectorAll('.lookthumb').forEach((x) => x.classList.toggle('on', x === b));
           App.keepSoon(c);
         });
@@ -4684,6 +4876,10 @@ const Studio = (() => {
   }
 
   // ----- parts -----
+  // A grown look's crest is handled like a part, after the child's own (index d.parts.length). Where it is moved to is kept with the look.
+  const P = (i) => (i < d.parts.length ? d.parts[i] : c.gp[i - d.parts.length] || null);
+  const isCrest = (i) => i >= d.parts.length;
+  const keepCrest = (p) => { Grow.of(d).crest[c.look] = [p.x, p.y, p.s || 1, p.r || 0]; };
   const slotFor = (def, key) => partSlot(c, key);
   function addPart(key, px, py) {
     const def = PARTS[key];
@@ -4701,13 +4897,14 @@ const Studio = (() => {
     return st.sel;
   }
   function partGeom(i) {
-    const p = d.parts[i], def = PARTS[p.k];
+    const p = P(i), def = PARTS[p.k];
     const [ax, ay] = c.toWorld(p._u, p._v), px = c.S * def.size * (p.s || 1);
     const tall = def.layer === 'back' || TALL_PARTS.includes(p.k);
     const off = def.box ? -def.box[1] * px : tall ? 0.45 * px : 0, r = p.r || 0;
     return { ax, ay, cx: ax + Math.sin(r) * off, cy: ay - Math.cos(r) * off, px, R: Math.max(30, px * 0.62) + 8 };
   }
   function removePart(i) {
+    if (isCrest(i)) { Grow.of(d).crest[c.look] = 0; c.refreshParts(); st.sel = -1; Sound.sfx('delete'); App.keepSoon(c); return; }   // the look stays; only its crest comes off
     d.parts.splice(i, 1); c.swing.splice(i, 1); c.refreshParts(); st.sel = -1;
     Sound.sfx('delete'); App.keepSoon(c);
   }
@@ -4738,20 +4935,20 @@ const Studio = (() => {
       return;
     }
     // parts: handles of the selected part first
-    if (st.sel >= 0 && d.parts[st.sel]) {
+    if (st.sel >= 0 && P(st.sel)) {
       const gm = partGeom(st.sel), k = Math.SQRT1_2;
       if (hypot(p.x - (gm.cx + gm.R * k), p.y - (gm.cy - gm.R * k)) < 26) {
-        const part = d.parts[st.sel];
+        const part = P(st.sel);
         st.drag = { type: 'handle', i: st.sel, s0: part.s || 1, r0: part.r || 0, d0: hypot(p.x - gm.ax, p.y - gm.ay) || 1, a0: Math.atan2(p.y - gm.ay, p.x - gm.ax) };
         return;
       }
       if (hypot(p.x - (gm.cx - gm.R * k), p.y - (gm.cy - gm.R * k)) < 24) { removePart(st.sel); return; }
     }
     let hit = -1, best = 1e9;
-    for (let i = d.parts.length - 1; i >= 0; i--) {
-      if (!PARTS[d.parts[i].k]) continue;
+    for (let i = d.parts.length + c.gp.length - 1; i >= 0; i--) {
+      if (!PARTS[P(i).k]) continue;
       const gm = partGeom(i), dist = hypot(p.x - gm.cx, p.y - gm.cy);
-      if (dist < Math.max(24, gm.px * 0.55) && dist < best) { best = dist; hit = i; if (PARTS[d.parts[i].k].layer !== 'back') break; }
+      if (dist < Math.max(24, gm.px * 0.55) && dist < best) { best = dist; hit = i; if (PARTS[P(i).k].layer !== 'back') break; }
     }
     st.sel = hit;
     if (hit >= 0) {
@@ -4778,8 +4975,8 @@ const Studio = (() => {
       return;
     }
     const dr = st.drag;
-    if (!dr || !d.parts[dr.i]) return;
-    const part = d.parts[dr.i];
+    if (!dr || !P(dr.i)) return;
+    const part = P(dr.i);
     if (dr.type === 'part') {
       const [ux0, uy0] = c.toUnit(part.x, part.y);
       part.x = clamp((p.x - dr.ox - sq.x) / sq.s, -0.1, 1.1); part.y = clamp((p.y - dr.oy - sq.y) / sq.s, -0.1, 1.1);
@@ -4789,6 +4986,7 @@ const Studio = (() => {
       part.s = clamp((dr.s0 * hypot(p.x - gm.ax, p.y - gm.ay)) / dr.d0, 0.4, 3.2);
       part.r = wrapAngle(dr.r0 + Math.atan2(p.y - gm.ay, p.x - gm.ax) - dr.a0);
     }
+    if (isCrest(dr.i)) keepCrest(part);
     c.refreshParts();
   }
 
@@ -4815,9 +5013,9 @@ const Studio = (() => {
     }
     const dr = st.drag;
     st.drag = null;
-    if (dr && dr.type === 'part' && d.parts[dr.i]) {
+    if (dr && dr.type === 'part' && P(dr.i)) {
       const overTray = p && p.y > tray.getBoundingClientRect().top + 6;
-      const part = d.parts[dr.i];
+      const part = P(dr.i);
       if (overTray || part.x < -0.08 || part.x > 1.08 || part.y < -0.08 || part.y > 1.08) { removePart(dr.i); return; }
       Sound.sfx('stick'); c.qv += 1.6;
     }
@@ -4871,7 +5069,7 @@ const Studio = (() => {
       g.restore();
     }
 
-    if (st.step === 2 && st.sel >= 0 && d.parts[st.sel] && c.m) {
+    if (st.step === 2 && st.sel >= 0 && P(st.sel) && c.m) {
       const gm = partGeom(st.sel), k = Math.SQRT1_2;
       g.save();
       g.strokeStyle = 'rgba(43,45,66,0.55)'; g.lineWidth = 2.5; g.setLineDash([7, 8]); g.lineDashOffset = -st.t * 14;
@@ -4908,7 +5106,7 @@ const Studio = (() => {
     g.stroke();
   }
 
-  return { enter, exit, step, draw, down, move, up, resize: () => root && layout(), _peek: () => ({ sq: { ...sq }, step: st.step, sel: st.sel, parts: c && c.m ? d.parts.map((p, i) => ({ k: p.k, ...partGeom(i) })) : [] }) };
+  return { enter, exit, step, draw, down, move, up, resize: () => root && layout(), _peek: () => ({ sq: { ...sq }, step: st.step, sel: st.sel, parts: c && c.m ? d.parts.map((p, i) => ({ k: p.k, ...partGeom(i) })) : [], crest: c && c.m && c.gp.length ? { k: c.gp[0].k, ...partGeom(d.parts.length) } : null }) };
 })();
 
 // ===== places.js =====
@@ -5371,7 +5569,7 @@ const World = (() => {
   const fire = { t: 0, a: 0 };
   let rocket = null, night = 0, dark = 0, shake = 0, flash = 0, time = 0, voiceSize = -1, clouds = [];
   let place = 'meadow', amb = null, wipe = null, toy = null, pals = [], placePanel, palPanel, tunePanel, placeBtn, palBtn, goal = 0;
-  let nameTag, fairBtn, snackG = [], snackEls = [], lookT = 0, goalAt = -99;
+  let nameTag, fairBtn, snackG = [], snackEls = [], goalAt = -99;
 
   const after = (t, fn) => timers.push({ t: time + t, fn });
   const busy = () => ai.busy || teach.rec || teach.perf || phase !== 'play';
@@ -5705,7 +5903,7 @@ const World = (() => {
     for (const e of [snackPanel, trickPanel, placePanel, palPanel, snackBtn, wandBtn, placeBtn, palBtn]) e.classList.remove('on');
     newToy();
     if (d.awake) { const all = palChoices(); (d.pals || []).forEach((id) => { const pd = all.find((x) => x.id === id); if (pd) addPal(pd, true); }); }
-    nameTag.value = d.name || ''; nameTag.classList.remove('pulse'); lookT = 1.6; goalAt = -99;
+    nameTag.value = d.name || ''; nameTag.classList.remove('pulse'); goalAt = -99;
     let been = true; try { been = !!localStorage.getItem('doodlings.fair.v1'); } catch (e) { /* ignore */ }
     fairBtn.classList.toggle('glow', !been);              // until someone has found the fair on this device
     SNACK_LIST.forEach((_, i) => drawSnackBtn(i));
@@ -5834,7 +6032,7 @@ const World = (() => {
     if (gd.tricks && gd.tricks[0]) after(2.2, () => { if (!pals.includes(p) || p.c.grab) return; const q = gd.tricks[0].p; p.perf = { p: q, n: q.length / 3, t: -0.1, x0: p.c.x, y0: p.c.y }; p.c.setMood('happy', 2); palVoice(p.c, 'whee'); });
   }
   // something the doodling did has just counted: show what it gained
-  function gained(kind, o) { const r = Grow.earn(d, kind, o); if (r) { GrowHud.show(d, r); lookT = 5.4; App.keepSoon(c); } }
+  function gained(kind, o) { const r = Grow.earn(d, kind, o); if (r) { GrowHud.show(d, r, { x: c.x, y: c.y - c.S * 0.4 }); App.keepSoon(c); } }
 
   function steam() {
     fxp.burst('puff', c.x, c.y, 12, { angle: -Math.PI / 2, spread: 1.2, speed: 240, size: c.S * 0.3, life: 0.9, color: 'rgba(255,255,255,0.85)', drag: 2.2 });
@@ -6235,8 +6433,6 @@ const World = (() => {
     stepPals(dt);
     GrowHud.step(dt);
     for (const p of pals) p.tagT = Math.max(0, p.tagT - dt);
-    // ready to grow a look? Only in a quiet moment, never in the middle of something
-    if (phase === 'play' && !busy() && !c.grab && !show.on && !held && !GrowHud.busy && document.activeElement !== nameTag) { lookT -= dt; if (lookT <= 0) { lookT = 2; offerLook(c, (wore) => { lookT = 1e9;   /* one growing moment at a time: the next waits for the next thing it does, or the next visit */ fxp.burst('star', c.x, c.y, 20, { speed: c.S * 6, size: 16, life: 1, colors: ['#fff', '#FFC928', d.color], drag: 2.6 }); c.setMood('happy', 2); Sound.voice(wore ? 'tada' : 'happy'); c.say(0.5); if (c.standing) c.hop(0, 1.2); }); } }
     if (toy) stepToy(dt);
     amb.step(dt, c);
     if (wipe) { wipe.t += dt; if (wipe.t > 0.7) wipe = null; }
@@ -6376,7 +6572,8 @@ const World = (() => {
       }
     }
     if (flash > 0.01) { g.fillStyle = `rgba(255,252,235,${flash * flash})`; g.fillRect(0, 0, W, H); }
-    GrowHud.draw(g, W, 122);
+    const nt = nameTag.getBoundingClientRect(), root = App.ui.getBoundingClientRect();   // at home the gift waits beside the doodling's name
+    GrowHud.draw(g, W, 122, phase === 'play' && !show.on ? c : null, nt.width ? { x: nt.right - root.left + 26, y: nt.top - root.top + nt.height / 2 } : null);
   }
 
   function drawSnack(g, k, x, y, r, rot) {
@@ -7153,7 +7350,7 @@ const Quest = (() => {
     script = null; fly = []; hint = null;
     c.kin = null; c.fx = {}; c.scT = c.sc = 1; c.mouthHold = 0; c.alive = true; c.asleep = false;
     setMode('map');
-    if (gainRep) { GrowHud.show(d, gainRep); gainRep = null; }
+    if (gainRep) { GrowHud.show(d, gainRep, { x: c.x, y: c.y - c.S * 0.4 }); gainRep = null; }
     layoutMap();
     map.arrive = arrive; map.t = 0;
     const n = LV().length; let next = LV().findIndex((q, i) => !done[i]);
@@ -7548,7 +7745,8 @@ const Quest = (() => {
 
   function draw(g) {
     const W = App.W, H = App.H;
-    if (mode === 'map') { drawMap(g, App.dt); fxp.draw(g, true); fxp.draw(g, false); GrowHud.draw(g, W, 76); return; }
+    if (mode === 'map') { drawMap(g, App.dt); fxp.draw(g, true); fxp.draw(g, false); const sb = document.querySelector('[aria-label="Sound"]'), sr = sb && sb.getBoundingClientRect(), ur = App.ui.getBoundingClientRect(); GrowHud.draw(g, W, 76, c, sr && sr.width ? { x: sr.left - ur.left - 34, y: sr.top - ur.top + sr.height / 2 } : null); return; }   // on the map the gift waits in the top bar, beside the sound button, clear of every stop
+
     // the land, tiled mirror-fashion so it never ends, in front of a sky that stays where it is
     g.drawImage(backdrop[0], 0, 0, W, H);
     const t0 = Math.floor(cam / W);
@@ -7865,7 +8063,7 @@ const Shoot = (() => {
     newBest = score > best;
     if (newBest) { d.best[key()] = best = score; }
     const rep = Grow.earn(d, role, { bonus: score >= 4, tickets: 2 + (newBest ? 1 : 0) });
-    GrowHud.show(d, rep);
+    GrowHud.show(d, rep, { x: c.x, y: c.y - c.S * 0.4 });
     App.keep(c);
     Sound.sfx(newBest ? 'magic' : 'learn');
     if (newBest) { flash = 0.5; for (const s of [0.2, 0.8]) fxp.burst('confetti', App.W * s, App.H * 0.5, 30, { angle: -Math.PI / 2, spread: 0.7, speed: 800, size: 12, life: 2.2, colors: PALETTE.slice(0, 9), g: 900, drag: 1.3 }); Sound.sfx('confetti'); }
@@ -8550,7 +8748,7 @@ const Cup = (() => {
     if (!replay) {
       const G = Grow.of(d), first = medal > G.cups[cupI];
       if (first) G.cups[cupI] = medal;
-      GrowHud.show(d, Grow.earn(d, 'cup', { tickets: 2 + medal }));
+      GrowHud.show(d, Grow.earn(d, 'cup', { tickets: 2 + medal }), { x: c.x, y: c.y - c.S * 0.4 });
       App.keep(c);
     }
     Sound.sfx('learn'); Sound.sfx('confetti');
@@ -8874,7 +9072,7 @@ function friendChoices(d) {
 
 const Fair = (() => {
   let root, panel, prizeEls = {};
-  let c = null, d = null, fxp = null, mode = 'hub', time = 0, bg = null, bgW = 0, bgH = 0, crowd = [], pals = [], going = null, ptr = null, idle = 0, momentT = 0;
+  let c = null, d = null, fxp = null, mode = 'hub', time = 0, bg = null, bgW = 0, bgH = 0, crowd = [], pals = [], going = null, ptr = null, idle = 0;
   const hub = { nodes: [], R: 60, floor: 0, S: 50 };
   const env = { g: 2000, floor: 0, left: 0, right: 0, top: -4000 };
   const game = () => ({ shoot: Shoot, cup: Cup })[mode] || null;
@@ -8939,7 +9137,7 @@ const Fair = (() => {
   }
   function openHub() {
     const g0 = game(); if (g0) g0.stop();
-    mode = 'hub'; going = null; idle = 0; momentT = 1.1;
+    mode = 'hub'; going = null; idle = 0;
     root.dataset.mode = mode; panel.classList.remove('on');
     layoutHub();
     fxp.clear(); GrowHud.pin(d);
@@ -9142,13 +9340,13 @@ const Fair = (() => {
       if (k.standing && Math.random() < dt * 0.45) k.hop(clamp((App.W * (i ? 0.78 : 0.24) - k.x) * 0.9 + rand(-1, 1) * hub.S, -hub.S * 3, hub.S * 3), rand(0.3, 0.55));
       k.lookAt = { x: c.x, y: c.y }; k.step(dt, env);
     });
-    // ready to grow a look? Wait until the card has finished showing what was gained.
-    if (!going && !GrowHud.busy && !Moment.isOpen) { momentT -= dt; if (momentT <= 0) { momentT = 1.5; offerLook(c, () => { momentT = 1e9; fxp.burst('star', c.x, c.y, 18, { speed: c.S * 6, size: 16, life: 1, colors: ['#fff', '#FFC928', d.color], drag: 2.6 }); c.setMood('happy', 2); if (c.standing) c.hop(0, 1.2); }); } }
   }
   function draw(g) {
     const g0 = game();
     if (g0) g0.draw(g); else if (mode === 'counter') drawCounter(g); else drawHub(g);
-    GrowHud.draw(g, App.W, 12);
+    // the gift chip can be tapped between rounds, never in the middle of one
+    const calm = mode === 'hub' || mode === 'counter' || (mode === 'shoot' && ['ready', 'done'].includes(Shoot.peek().phase)) || (mode === 'cup' && Cup.peek().phase === 'podium');
+    GrowHud.draw(g, App.W, 12, calm && !going ? c : null);
   }
   function down(p) { idle = 0; const g0 = game(); if (g0) { g0.down(p); return; } ptr = { x: p.x, y: p.y, moved: 0 }; }
   function move(p) { const g0 = game(); if (g0) { g0.move(p); return; } if (ptr) { ptr.moved += Math.abs(p.x - ptr.x) + Math.abs(p.y - ptr.y); ptr.x = p.x; ptr.y = p.y; } for (const k of [c, ...pals]) if (mode === 'hub' && !going) k.lookAt = { x: p.x, y: p.y }; }
@@ -9174,14 +9372,6 @@ const Fair = (() => {
 
   return { enter, exit, step, draw, down, move, up, resize, backdrop };
 })();
-
-// A doodling that is ready to grow a look is shown the choice. then(wore) runs after the child has picked.
-function offerLook(c, then) {
-  const look = Grow.pending(c.d);
-  if (!look || Moment.isOpen || Card.isOpen || Moment.hold) return false;
-  Moment.open(c, look, then);
-  return true;
-}
 
 // ===== app.js =====
 // ---------- Home: the shelf where doodlings wait ----------
