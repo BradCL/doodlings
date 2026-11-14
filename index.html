@@ -122,7 +122,36 @@ input.name::placeholder { color: rgba(43,45,66,.35); }
 input.name:focus { box-shadow: 0 0 0 4px var(--sun), 0 10px 22px rgba(43,45,66,.2); }
 .qrwrap { position: absolute; inset: 0; display: none; place-items: center; background: rgba(36,30,70,.8); z-index: 5; cursor: pointer; }
 .qrwrap.on { display: grid; }
-.qrwrap canvas { width: min(84vw, 84vh, 620px); height: auto; border-radius: 28px; box-shadow: 0 24px 60px rgba(0,0,0,.4); animation: pop .4s cubic-bezier(.3,1.4,.5,1); image-rendering: pixelated; }
+/* the sending screen: where it is going (two pictures, home first), the code for the chosen one, then a phone and the file */
+.qrwrap.send { background: var(--paper); grid-template-areas: "dests" "code" "under"; grid-template-rows: auto auto auto; align-content: center; gap: 16px; padding: calc(70px + var(--sat)) 12px calc(16px + var(--sab)); }
+.qrwrap.send .back { position: absolute; top: calc(12px + var(--sat)); left: calc(12px + env(safe-area-inset-left, 0px)); }
+.qrwrap.send .dests { grid-area: dests; display: flex; gap: 14px; justify-content: center; }
+/* the chosen picture wears the toy's chosen ring; the other is a little smaller, in full colour */
+.qrwrap.send .dest { padding: 0; border: 0; border-radius: 18px; background: #fff; cursor: pointer; transform: scale(.9); transition: transform .18s cubic-bezier(.3,1.6,.5,1); box-shadow: 0 4px 12px rgba(43,45,66,.16); }
+.qrwrap.send .dest canvas { display: block; border-radius: 18px; pointer-events: none; }
+.qrwrap.send .dest.on { transform: none; box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--ink), 0 6px 16px rgba(43,45,66,.2); }
+.qrwrap.send .codebox { grid-area: code; position: relative; display: grid; place-items: center; }
+.qrwrap.send .codebox canvas { width: min(84vw, calc(100vh - 330px), 560px); height: auto; border-radius: 26px; box-shadow: 0 14px 36px rgba(43,45,66,.22); animation: pop .4s cubic-bezier(.3,1.4,.5,1); image-rendering: pixelated; cursor: default; }
+.qrwrap.send .qrkind { display: none; }
+/* the phone: below the code at its right, tipped up toward it, nudging closer now and then */
+.qrwrap.send .phonecam { position: absolute; right: 4%; bottom: -78px; width: 42px; height: 70px; pointer-events: none; transform: rotate(-14deg); animation: camnudge 2.6s ease-in-out infinite; }
+.qrwrap.send .phonecam svg { display: block; width: 100%; height: 100%; }
+@keyframes camnudge { 0%, 55%, 100% { transform: rotate(-14deg) translate(0, 0); } 70%, 85% { transform: rotate(-14deg) translate(0, -10px); } }
+/* the file: at the left under the code, apart from the phone */
+.qrwrap.send .under { grid-area: under; width: min(84vw, calc(100vh - 330px), 560px); justify-self: center; display: flex; justify-content: flex-start; min-height: 80px; }
+.qrwrap.send .filepic { padding: 0; border: 0; background: none; cursor: pointer; filter: drop-shadow(0 4px 8px rgba(43,45,66,.16)); }
+.qrwrap.send .filepic canvas { display: block; pointer-events: none; }
+.qrwrap.send.nocode .dests, .qrwrap.send.nocode .codebox { display: none; }   /* opened from a file: the file alone, large */
+.qrwrap.send.nocode .under { grid-area: dests; width: auto; justify-content: center; }
+@media (max-height: 520px) and (min-width: 600px) {   /* sideways the code fills the height, so the pictures go beside it */
+  .qrwrap.send { grid-template-areas: "dests code" "under code"; grid-template-columns: auto auto; justify-content: center; column-gap: 28px; padding: 12px 70px 12px 12px; }
+  .qrwrap.send .dests { flex-direction: column; align-self: end; }
+  .qrwrap.send .under { align-self: start; width: auto; justify-content: center; }
+  .qrwrap.send .codebox canvas { width: min(calc(100vh - 40px), 520px); }
+  .qrwrap.send .phonecam { right: -62px; bottom: 14%; transform: rotate(-80deg); animation-name: camnudge-side; }
+  @keyframes camnudge-side { 0%, 55%, 100% { transform: rotate(-80deg) translate(0, 0); } 70%, 85% { transform: rotate(-80deg) translate(0, -10px); } }
+}
+
 
 /* ----- small screens ----- */
 @media (max-width: 520px) {
@@ -984,6 +1013,9 @@ const ICONS = {
   music: _svg('<path d="M9 17.500V6.500l10-2.300v11"/><circle cx="6.500" cy="17.500" r="2.500" fill="currentColor"/><circle cx="16.500" cy="15.200" r="2.500" fill="currentColor"/>'),
   pencil: _svg('<path d="M4 20l1.200-4.500L16.500 4.200a1.800 1.800 0 0 1 2.600 0l.7.700a1.800 1.800 0 0 1 0 2.600L8.500 18.800z"/><path d="M14.500 6.500l3 3"/>'),
   camera: _svg('<path d="M3.500 8.500h3.500l1.500-2.500h7l1.500 2.500h3.500v10.500h-17z"/><circle cx="12" cy="13.500" r="3.300"/>'),
+  upload: _svg('<path d="M12 16V5M7 9.500l5-5 5 5M5 20h14"/>', 'stroke-width="2.600"'),
+  file: _svg('<path d="M6.500 3.500h7.500l4.500 4.500v12.500h-12z"/><path d="M14 3.500V8h4.500"/><path d="M12 17.500v-6M9.500 14l2.500-2.500 2.500 2.500"/>'),
+  phonecam: _svg('<rect x="7" y="2.500" width="10" height="19" rx="2.200"/><path d="M10 8h-1v1M14 8h1v1M10 15h-1v-1M14 15h1v-1"/>'),
   download: _svg('<path d="M12 4v11M7 10.500l5 5 5-5M5 20h14"/>', 'stroke-width="2.600"'),
   spark: _svg('<path d="M11 2.500l2.200 6.300 6.300 2.200-6.300 2.200L11 19.500l-2.200-6.300L2.500 11l6.300-2.200z" fill="currentColor"/><path d="M19 15.500l.9 2.100 2.100.9-2.100.9-.9 2.100-.9-2.100-2.100-.9 2.100-.9z" fill="currentColor"/>', 'stroke-width="1.200"'),
   rec: _svg('<circle cx="12" cy="12" r="7.500" fill="currentColor" stroke="none"/>'),
@@ -7552,7 +7584,9 @@ function drawWordmark(g, cx, cy, h, look, blink, color = INK) {
 
 const Card = (() => {
   const CW = 1080, CH = 1440;
-  let root, cv, g, nameInput, qrBtn, visitBtn, qrWrap, qrCv, qrKind, c = null, d = null, link = null, qr = null, friends = [];
+  // the phone held up to the code: its back toward the code, a small square on its screen
+  const PHONE_PIC = '<svg viewBox="0 0 40 66"><rect x="3" y="3" width="34" height="60" rx="7" fill="#fff" stroke="#2B2D42" stroke-width="3"/><rect x="8" y="10" width="24" height="40" rx="2" fill="#DDF0FA"/><path d="M13 22v-5h5M27 22v-5h-5M13 38v5h5M27 38v5h-5" fill="none" stroke="#2B2D42" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="16" y="26" width="8" height="8" rx="1" fill="#2B2D42"/><circle cx="20" cy="56.500" r="2.200" fill="#2B2D42"/></svg>';
+  let root, cv, g, nameInput, homeBtn, visitBtn, fileBtn, qrWrap, qrCv, qrKind, c = null, d = null, link = null, qr = null, friends = [];
 
   function build() {
     root = el('div', 'overlay', App.ui);
@@ -7564,16 +7598,30 @@ const Card = (() => {
     nameInput.addEventListener('input', () => { d.name = nameInput.value.trim().slice(0, 14); refreshLink(); render(); });
     nameInput.addEventListener('change', () => App.keep(c));
     nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') nameInput.blur(); });
+    // Two buttons: keep it (arrow down, a photo of the card), send it (arrow up, the sending screen). Brad, 2026-11-14: "Yes that is perfect"
     const row = el('div', 'row', box);
     iconBtn('close', 'ghost', row, 'Close', close);
-    qrBtn = iconBtn('link', '', row, 'Take it home', () => { Sound.sfx('tap'); showQR(false); });
-    visitBtn = iconBtn('suitcase', '', row, 'Send it to visit a friend', () => { Sound.sfx('tap'); showQR(true); });
     iconBtn('download', 'primary', row, 'Save picture', save);
-    iconBtn('spark', '', row, 'Save playable copy', savePlayable);
-    qrWrap = el('div', 'qrwrap', root);
-    qrKind = el('div', 'qrkind', qrWrap);
-    qrCv = el('canvas', '', qrWrap); qrCv.width = qrCv.height = 900;
-    qrWrap.addEventListener('click', () => qrWrap.classList.remove('on'));
+    iconBtn('upload', '', row, 'Send it', openSend);
+    // The sending screen: where is it going? Two pictures, with her own doodling: home (chosen first) and visiting a friend.
+    // The chosen one wears a ring and the code under it is its code; a tap on the other changes the code. A third way: as a file.
+    qrWrap = el('div', 'qrwrap send', root);
+    const dests = el('div', 'dests', qrWrap);
+    homeBtn = el('button', 'dest', dests); homeBtn.type = 'button'; homeBtn.setAttribute('aria-label', 'Take it home');
+    visitBtn = el('button', 'dest', dests); visitBtn.type = 'button'; visitBtn.setAttribute('aria-label', 'Send it to visit a friend');
+    homeBtn.addEventListener('click', (e) => { e.stopPropagation(); Sound.sfx('tap'); showQR(false); });
+    visitBtn.addEventListener('click', (e) => { e.stopPropagation(); Sound.sfx('tap'); showQR(true); });
+    const codeBox = el('div', 'codebox', qrWrap);
+    qrKind = el('div', 'qrkind', codeBox);
+    qrCv = el('canvas', '', codeBox); qrCv.width = qrCv.height = 900;
+    qrCv.addEventListener('click', (e) => e.stopPropagation());
+    const cam = el('div', 'phonecam', codeBox, PHONE_PIC); cam.setAttribute('aria-hidden', 'true');   // a picture, not a button: a phone looking at the code
+    const under = el('div', 'under', qrWrap);
+    fileBtn = el('button', 'filepic', under); fileBtn.type = 'button'; fileBtn.setAttribute('aria-label', 'Save playable copy');
+    fileBtn.addEventListener('click', (e) => { e.stopPropagation(); Sound.unlock(); savePlayable(); });
+    const back = iconBtn('close', 'ghost back', qrWrap, 'Back', () => { qrWrap.classList.remove('on'); Sound.sfx('tap'); });
+    back.addEventListener('click', (e) => e.stopPropagation());
+    qrWrap.addEventListener('click', () => { qrWrap.classList.remove('on'); Sound.sfx('tap'); });   // the cross, or a tap off the pictures and the code: back to the card
     root.addEventListener('click', (e) => { if (e.target === root) close(); });
   }
 
@@ -7587,7 +7635,55 @@ const Card = (() => {
       qr = QR.encode(url, { ecc: 'L' });
       if (qr && qr.size <= 137) link = url; else qr = null;
     }
-    qrBtn.style.display = visitBtn.style.display = qr ? '' : 'none';
+  }
+  // Send it: the sending screen. With no code (opened from a file, or a code too big to read), sending as a file is the only way.
+  function openSend() {
+    Sound.sfx('page');
+    drawDests();
+    const can = !!qr;
+    qrWrap.classList.toggle('nocode', !can);
+    if (can) showQR(false); else { qrWrap.classList.add('on'); }
+  }
+  // the two pictures, drawn with her own doodling: at home in a house; with its suitcase beside a friend
+  function drawDests() {
+    const draw = (btn, visit) => {
+      btn.replaceChildren();
+      const W = Math.min(170, Math.round((Math.min(window.innerWidth, 520) - 70) / 2)), H = Math.round(W * 0.72), [, gg] = miniCanvas(0, btn), cvv = btn.querySelector('canvas');
+      const dpr = Math.min(3, window.devicePixelRatio || 1); cvv.width = W * dpr; cvv.height = H * dpr; cvv.style.width = W + 'px'; cvv.style.height = H + 'px';
+      gg.setTransform(dpr, 0, 0, dpr, 0, 0);
+      gg.fillStyle = visit ? '#E6DDF8' : '#DDF0FA'; gg.fillRect(0, 0, W, H);
+      gg.fillStyle = '#BFE6A6'; gg.fillRect(0, H * 0.8, W, H * 0.2);
+      const put = (dd, x, S) => { const k = new Critter({ ...dd, parts: dd.parts.map((p) => ({ ...p })) }); k.alive = true; k.mood = 'happy'; k.moodT = 9; k.pose(x, 0, S); k.pose(x, H * 0.84 - k.bounds.maxY, S); k.draw(gg); return k; };
+      if (!visit) {
+        gg.lineJoin = 'round'; gg.lineWidth = 3; gg.strokeStyle = INK;
+        gg.fillStyle = '#FFF3DC'; gg.beginPath(); gg.rect(W * 0.2, H * 0.36, W * 0.6, H * 0.48); gg.fill(); gg.stroke();
+        gg.fillStyle = '#FF5A4E'; gg.beginPath(); gg.moveTo(W * 0.12, H * 0.4); gg.lineTo(W * 0.5, H * 0.08); gg.lineTo(W * 0.88, H * 0.4); gg.closePath(); gg.fill(); gg.stroke();
+        put(d, W * 0.5, W * 0.1);
+      } else {
+        const fr = friendChoices(d)[0];
+        if (fr) put(fr, W * 0.3, W * 0.1);
+        const k = put(d, W * 0.68, W * 0.1);
+        const sx = W * 0.68 + W * 0.15, sy = H * 0.84 - W * 0.1;   // the suitcase beside it
+        gg.lineWidth = 2.4; gg.strokeStyle = INK; gg.fillStyle = '#FFC928'; gg.beginPath(); gg.roundRect(sx - 9, sy - 2, 18, 14, 3); gg.fill(); gg.stroke();
+        gg.beginPath(); gg.moveTo(sx - 4, sy - 2); gg.lineTo(sx - 4, sy - 6); gg.lineTo(sx + 4, sy - 6); gg.lineTo(sx + 4, sy - 2); gg.stroke();
+      }
+    };
+    draw(homeBtn, false); draw(visitBtn, true);
+    drawFile(!qr);
+  }
+  // the file: her doodling inside a page with a folded corner. Small beside the code; large when it is the only way.
+  function drawFile(big) {
+    fileBtn.replaceChildren();
+    const W = big ? Math.min(220, Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.5)) : 64, H = Math.round(W * 1.25);
+    const [, gg] = miniCanvas(0, fileBtn), cvv = fileBtn.querySelector('canvas');
+    const dpr = Math.min(3, window.devicePixelRatio || 1); cvv.width = W * dpr; cvv.height = H * dpr; cvv.style.width = W + 'px'; cvv.style.height = H + 'px';
+    gg.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const lw = Math.max(2.4, W * 0.035), m = lw, f = W * 0.28;
+    gg.lineJoin = 'round'; gg.lineWidth = lw; gg.strokeStyle = INK; gg.fillStyle = '#fff';
+    gg.beginPath(); gg.moveTo(m, m); gg.lineTo(W - m - f, m); gg.lineTo(W - m, m + f); gg.lineTo(W - m, H - m); gg.lineTo(m, H - m); gg.closePath(); gg.fill(); gg.stroke();
+    gg.fillStyle = '#E8E2D4'; gg.beginPath(); gg.moveTo(W - m - f, m); gg.lineTo(W - m - f, m + f); gg.lineTo(W - m, m + f); gg.closePath(); gg.fill(); gg.stroke();
+    const k = new Critter({ ...d, parts: d.parts.map((p) => ({ ...p })) }); k.alive = true; k.mood = 'happy'; k.moodT = 9;
+    const S = W * 0.2; k.pose(W * 0.46, 0, S); k.pose(W * 0.46, H * 0.8 - k.bounds.maxY, S); k.draw(gg);
   }
   // The big code to hold up to a camera. Two kinds: the house takes the doodling home, with everything it has grown and won.
   // The suitcase sends it visiting: it arrives at a friend's as a guest, and stays the sender's own.
@@ -7599,6 +7695,7 @@ const Card = (() => {
     q.fillStyle = '#fff'; q.fillRect(0, 0, 900, 900);
     QR.draw(q, code, 30, 30, 840, { dark: INK, light: '#ffffff', quiet: 2, round: 0 });
     qrKind.innerHTML = ICONS[visit ? 'suitcase' : 'home']; qrWrap.dataset.kind = visit ? 'visit' : 'home';
+    homeBtn.classList.toggle('on', !visit); visitBtn.classList.toggle('on', visit);
     qrWrap.classList.add('on');
   }
 
