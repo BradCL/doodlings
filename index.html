@@ -254,6 +254,11 @@ input.tag.pulse { animation: pulse 1.5s ease-in-out infinite; box-shadow: 0 0 0 
 .cupbar .btn.go { --btn: 68px; }
 .thumb.pack { touch-action: manipulation; }
 .thumb.pack.on { box-shadow: 0 0 0 3px var(--card), 0 0 0 7px var(--q); }
+.tryrow { position: absolute; left: 0; right: 0; display: none; justify-content: center; align-items: center; gap: 28px; z-index: 6; pointer-events: none; }
+.tryrow.on { display: flex; }
+.tryrow .btn { pointer-events: auto; }
+.tryrow .tryoff { --btn: 52px; color: #fff; background: var(--coral); }
+.tryrow .buy { --btn: 72px; }
 .panel.prizes { position: absolute; left: 0; right: 0; margin: 0 auto; width: -webkit-fit-content; width: fit-content; bottom: calc(14px + var(--sab)); grid-template-columns: repeat(5, auto); }
 .thumb.prize { width: 72px; height: 72px; }
 .thumb.prize.on, .thumb.lookthumb.on { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--ink); }
@@ -289,6 +294,8 @@ input.tag.pulse { animation: pulse 1.5s ease-in-out infinite; box-shadow: 0 0 0 
 .giftchip { position: absolute; z-index: 20; width: 44px; height: 44px; padding: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; display: none; }
 .giftchip canvas { display: block; pointer-events: none; }
 .giftchip:active { transform: scale(.9); }
+.giftchip.glow { border-radius: 50%; animation: chipglow 1.4s ease-in-out infinite; }
+@keyframes chipglow { 0%,100% { box-shadow: 0 0 0 0 rgba(255,201,40,.75); } 50% { box-shadow: 0 0 0 12px rgba(255,201,40,0); transform: scale(1.08); } }
 /* the sparkle tab in the studio, with a gift waiting: the same small gift is its "new" mark */
 .btn .giftmark { position: absolute; top: -6px; right: -6px; pointer-events: none; }
 
@@ -4280,7 +4287,7 @@ const GiftChip = (() => {
     if (tw < 0.16) { const a = Math.sin((tw / 0.16) * Math.PI); drawTwinkle(g, (many ? 15 : SZ / 2) + 9, 11, 5 * a + 1, a); drawTwinkle(g, (many ? 15 : SZ / 2) - 10, 25, 3 * a + 0.5, a * 0.8); }
     btn.setAttribute('aria-label', 'Gift ' + n);
   }
-  return { place, get el() { return btn; } };
+  return { place, glow: (on) => { if (btn) btn.classList.toggle('glow', !!on); }, get el() { return btn; } };
 })();
 
 // ---------- the growing card: three abilities with five pips each, and the tickets ----------
@@ -4313,15 +4320,16 @@ const GrowHud = (() => {
   }
   // top = the y the card sits at. Its width shrinks to leave the corner buttons clear.
   // c: the doodling on this screen. Without it there is no gift chip (it is mid-game, or a screen with nowhere for it).
-  function draw(g, W, top = 12, c = null, spot = null) {
+  // hintOK: whether this screen may make the gift glow the first time. Never in a game, where the screen has its own finger to follow.
+  function draw(g, W, top = 12, c = null, spot = null, hintOK = true) {
     const dd = c ? c.d : d;
     if (dd && !dd.guest) {
       const G = Grow.of(dd), home = chipAt(W, top, spot), n = G.gifts.length - (gift ? 1 : 0);
       GiftChip.place(c, home.x, home.y, Moment.isOpen ? 0 : n, clock);
       if (gift) drawArrival(g, home);
-      // the first time only, until a gift has been opened: a finger shows that the chip opens
-      if (c && n > 0 && !gift && !opened && !G.looks.length && !Moment.isOpen) { hint += App.dt || 0.016; if (hint > 4) { const u2 = ((hint - 4) % 2.2) / 2.2, a = u2 < 0.1 ? u2 * 10 : u2 > 0.85 ? (1 - u2) / 0.15 : 1, press = u2 > 0.35 && u2 < 0.6 ? 1 : 0; drawTouchDot(g, home.x + 10, home.y + 22 - (press ? 0 : 12), press ? 0.7 : 0, a); } }
-      else hint = 0;
+      // the first time only, until a gift has been opened, and never in a game: the gift glows yellow, "tap this next"
+      if (c && hintOK && n > 0 && !gift && !opened && !G.looks.length && !Moment.isOpen) hint += App.dt || 0.016; else hint = 0;
+      GiftChip.glow(hint > 4);
     }
     if (amt < 0.01 || !d) return;
     const G = Grow.of(d), u = Math.min(1, (W - 128) / 262), w = 262 * u, h = 52 * u, x = (W - w) / 2 + Math.sin(wig * 22) * wig * 7, y = top - (1 - amt) * (h + top + 12);
@@ -9071,7 +9079,7 @@ function friendChoices(d) {
 }
 
 const Fair = (() => {
-  let root, panel, prizeEls = {};
+  let root, panel, prizeEls = {}, tryRow, buyBtn, offBtn, trying = null;   // trying: the prize it has on to see, not bought yet
   let c = null, d = null, fxp = null, mode = 'hub', time = 0, bg = null, bgW = 0, bgH = 0, crowd = [], pals = [], going = null, ptr = null, idle = 0;
   const hub = { nodes: [], R: 60, floor: 0, S: 50 };
   const env = { g: 2000, floor: 0, left: 0, right: 0, top: -4000 };
@@ -9088,6 +9096,11 @@ const Fair = (() => {
       b.addEventListener('click', () => { Sound.unlock(); tapPrize(p.k); });
       prizeEls[p.k] = b;
     });
+    // trying a prize on: the cross takes it off again, the yellow ticket button buys it
+    tryRow = el('div', 'tryrow', root);
+    offBtn = iconBtn('close', 'tryoff', tryRow, 'Take it off', () => { Sound.unlock(); endTry(true); });
+    buyBtn = el('button', 'btn primary buy', tryRow); buyBtn.type = 'button'; buyBtn.setAttribute('aria-label', 'Buy it');
+    buyBtn.addEventListener('click', () => { Sound.unlock(); buyTried(); });
   }
 
   // ----- the painted fairground (also behind the cup chooser and the prize counter) -----
@@ -9137,6 +9150,7 @@ const Fair = (() => {
   }
   function openHub() {
     const g0 = game(); if (g0) g0.stop();
+    endTry(false);
     mode = 'hub'; going = null; idle = 0;
     root.dataset.mode = mode; panel.classList.remove('on');
     layoutHub();
@@ -9251,7 +9265,7 @@ const Fair = (() => {
       g.fillStyle = G.tickets >= p.cost ? '#FFF4CD' : 'rgba(43,45,66,0.07)'; g.beginPath(); g.roundRect(12, 46, 42, 17, 8.5); g.fill();
       drawTicket(g, 25, 54.5, 8.5); g.fillStyle = INK; g.font = `800 14px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(p.cost), 43, 55.5);
     } else { g.fillStyle = '#5BD66B'; g.strokeStyle = '#fff'; g.lineWidth = 2.6; g.lineCap = g.lineJoin = 'round'; g.beginPath(); g.arc(54, 12, 9, 0, TAU); g.fill(); g.beginPath(); g.moveTo(49.5, 12); g.lineTo(53, 15.5); g.lineTo(58.5, 8.5); g.stroke(); }
-    b.classList.toggle('on', on); b.classList.toggle('own', own); b.classList.toggle('far', !own && G.tickets < p.cost);
+    b.classList.toggle('on', on || trying === p.k); b.classList.toggle('own', own); b.classList.toggle('far', !own && G.tickets < p.cost);
   }
   function openCounter() {
     mode = 'counter'; root.dataset.mode = mode; GrowHud.pin(d); idle = 0;
@@ -9270,9 +9284,56 @@ const Fair = (() => {
     if (on) { const def = PARTS[k], n = def.orient && def.layer === 'back' ? 2 : 1; for (let i = 0; i < n && d.parts.length < MAX_PARTS; i++) { const s = partSlot(c, k); d.parts.push({ k, x: s.x, y: s.y, s: 1, r: s.r, c: null }); } }
     c.swing.length = 0; c.refreshParts();
   }
-  function tapPrize(k) {
-    const p = PRIZES.find((x) => x.k === k), b = prizeEls[k], how = Grow.buy(d, k);
+  // A prize it does not own yet is tried on first, whether or not there are tickets enough: it shows on the doodling
+  // (a thing to wear) or stays picked (the bunting, the frame), and the yellow ticket button buys it. Nothing is
+  // bought by a tap on the prize itself. Trying on is never saved: it comes off when the counter is left.
+  function showTry() {
+    const p = trying && PRIZES.find((x) => x.k === trying);
+    tryRow.classList.toggle('on', !!p);
+    if (!p) return;
+    const G = Grow.of(d), can = G.tickets >= p.cost;
+    buyBtn.replaceChildren();
+    const [, g] = miniCanvas(56, buyBtn);
+    drawTicket(g, 19, 28, 11); g.fillStyle = INK; g.font = `800 20px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(p.cost), 40, 29);
+    buyBtn.classList.toggle('dim', !can); buyBtn.classList.toggle('glow', can);
+    const r = panel.getBoundingClientRect(), ur = App.ui.getBoundingClientRect();
+    if (App.H < 520) {                                       // sideways there is no room under the doodling: the buttons go beside it
+      tryRow.style.left = Math.round(c.x + hub.cS * 1.5) + 'px'; tryRow.style.right = 'auto'; tryRow.style.top = Math.round(c.y - 36) + 'px';
+    } else { tryRow.style.left = '0'; tryRow.style.right = '0'; tryRow.style.top = Math.round(r.top - ur.top - 86) + 'px'; }
+  }
+  function endTry(sound) {
+    if (!trying) return;
+    const p = PRIZES.find((x) => x.k === trying);
+    trying = null;
+    if (p && p.part && c) wear(p.k, false);
+    if (sound) { Sound.sfx('tap'); c.qv += 1.5; }
+    if (d) PRIZES.forEach(drawPrizeThumb);
+    showTry();
+  }
+  function tryOn(k) {
+    const p = PRIZES.find((x) => x.k === k);
+    if (trying === k) { endTry(true); return; }              // tapping it again takes it off
+    endTry(false);
+    trying = k;
+    if (p.part) wear(k, true);
+    Sound.sfx('stick'); c.qv += 3; c.setMood('happy', 1.2); popIn(prizeEls[k]);
+    PRIZES.forEach(drawPrizeThumb); showTry();
+  }
+  function buyTried() {
+    const k = trying, p = PRIZES.find((x) => x.k === k);
+    if (!p) return;
     idle = 0;
+    if (Grow.of(d).tickets < p.cost) { wiggle(buyBtn); GrowHud.shake(); Sound.sfx('error'); c.setMood('think', 0.8); return; }
+    trying = null; showTry();
+    if (p.part) wear(k, false);
+    tapPrize(k, true);
+  }
+  function tapPrize(k, confirmed) {
+    const p = PRIZES.find((x) => x.k === k), b = prizeEls[k];
+    idle = 0;
+    if (!confirmed && !Grow.owns(d, k)) { tryOn(k); return; }
+    endTry(false);                                           // whatever was being tried comes off first, so it is never saved
+    const how = Grow.buy(d, k);
     if (how === 'short') { wiggle(b); GrowHud.shake(); Sound.sfx('error'); c.setMood('think', 0.8); return; }
     if (how === 'bought') {
       if (p.part) wear(k, true);
@@ -9317,6 +9378,7 @@ const Fair = (() => {
   }
   function exit() {
     const g0 = game(); if (g0) g0.stop();
+    endTry(false);
     GrowHud.pin(null); GrowHud.hide(); Sound.music.stop();
     c.kin = null; c.fx = {}; c.sc = c.scT = 1; c.qT = 0; c.q = 0; c.onHop = null;
     root.classList.remove('on'); panel.classList.remove('on');
@@ -9346,7 +9408,7 @@ const Fair = (() => {
     if (g0) g0.draw(g); else if (mode === 'counter') drawCounter(g); else drawHub(g);
     // the gift chip can be tapped between rounds, never in the middle of one
     const calm = mode === 'hub' || mode === 'counter' || (mode === 'shoot' && ['ready', 'done'].includes(Shoot.peek().phase)) || (mode === 'cup' && Cup.peek().phase === 'podium');
-    GrowHud.draw(g, App.W, 12, calm && !going ? c : null);
+    GrowHud.draw(g, App.W, 12, calm && !going ? c : null, null, mode === 'hub' || mode === 'counter');
   }
   function down(p) { idle = 0; const g0 = game(); if (g0) { g0.down(p); return; } ptr = { x: p.x, y: p.y, moved: 0 }; }
   function move(p) { const g0 = game(); if (g0) { g0.move(p); return; } if (ptr) { ptr.moved += Math.abs(p.x - ptr.x) + Math.abs(p.y - ptr.y); ptr.x = p.x; ptr.y = p.y; } for (const k of [c, ...pals]) if (mode === 'hub' && !going) k.lookAt = { x: p.x, y: p.y }; }
@@ -9364,11 +9426,11 @@ const Fair = (() => {
   function resize() {
     if (!root || !c) return;
     const g0 = game();
-    if (g0) g0.resize(); else if (mode === 'counter') layoutCounter(); else { layoutHub(); for (const k of [c, ...pals]) { k.baseS = hub.S * (k === c ? 1 : 0.82); k.y = Math.min(k.y, hub.floor - k.baseS); } }
+    if (g0) g0.resize(); else if (mode === 'counter') { layoutCounter(); showTry(); } else { layoutHub(); for (const k of [c, ...pals]) { k.baseS = hub.S * (k === c ? 1 : 0.82); k.y = Math.min(k.y, hub.floor - k.baseS); } }
   }
 
   // read-only peek for the automated play-through and the lab
-  window.__fair = () => ({ mode, nodes: hub.nodes.map((n) => ({ k: n.k, x: n.x, y: n.y })), going: !!going, grow: d ? JSON.parse(JSON.stringify(Grow.of(d))) : null, levels: d ? Grow.levels(d) : null, best: d ? { ...d.best } : null, parts: d ? d.parts.map((p) => p.k) : [], shoot: mode === 'shoot' ? Shoot.peek() : null, cup: mode === 'cup' ? Cup.peek() : null, moment: Moment.isOpen, c: c ? { x: c.x, y: c.y, fx: Object.keys(c.fx), S: c.S } : null, tickets: d ? Grow.of(d).tickets : 0, prizes: Object.fromEntries(Object.entries(prizeEls).map(([k, b]) => [k, b.className])) });
+  window.__fair = () => ({ mode, nodes: hub.nodes.map((n) => ({ k: n.k, x: n.x, y: n.y })), going: !!going, grow: d ? JSON.parse(JSON.stringify(Grow.of(d))) : null, levels: d ? Grow.levels(d) : null, best: d ? { ...d.best } : null, parts: d ? d.parts.map((p) => p.k) : [], shoot: mode === 'shoot' ? Shoot.peek() : null, cup: mode === 'cup' ? Cup.peek() : null, moment: Moment.isOpen, trying, c: c ? { x: c.x, y: c.y, fx: Object.keys(c.fx), S: c.S } : null, tickets: d ? Grow.of(d).tickets : 0, prizes: Object.fromEntries(Object.entries(prizeEls).map(([k, b]) => [k, b.className])) });
 
   return { enter, exit, step, draw, down, move, up, resize, backdrop };
 })();
