@@ -3645,7 +3645,10 @@ class Critter {
         this.grounded = true; this.airT = 0;
         this.vx *= Math.exp(-(this.fx.ice ? 0.35 : this.grab ? 2 : 7 * (env.slip === undefined ? 1 : env.slip)) * h);
       } else this.airT += h;
-      if (this.y + minY < env.top) { this.y = env.top - minY; if (this.vy < 0) { if (this.onWall && this.vy < -300) this.onWall(-this.vy); this.vy *= -0.45; } }
+      // floating, a body comes to rest under the screen's row of buttons (env.ceil), with room for ears and hats; never so low that a body
+      // taller than the room below is pressed flat: then it may pass behind. Everything else goes up to the top of the screen, as always
+      const top = this.fx.float && env.ceil && !this.kin ? Math.max(env.top, Math.min(env.ceil + S * 0.3, env.floor - (maxY - minY) - 2)) : env.top;
+      if (this.y + minY < top) { this.y = top - minY; if (this.vy < 0) { if (this.onWall && this.vy < -300) this.onWall(-this.vy); this.vy *= -0.45; } }
       if (this.x + minX < env.left) { this.x = env.left - minX; if (this.vx < 0) { if (this.onWall && this.vx < -300) this.onWall(-this.vx); this.vx *= -0.6; this.av += 2; } }
       if (this.x + maxX > env.right) { this.x = env.right - maxX; if (this.vx > 0) { if (this.onWall && this.vx > 300) this.onWall(this.vx); this.vx *= -0.6; this.av -= 2; } }
     }
@@ -6685,6 +6688,13 @@ const World = (() => {
   }
 
   // nothing of the room goes under the buttons or the name tag: the lowest of them, measured when it is on the screen
+  // the bottom of the row with the name and her room's painting. A floating doodling comes to rest under it, never behind it, so a tap
+  // meant to pop it always reaches it (one once drifted under the painting). Hops, flings and the ball still go up behind the row for a moment, as always
+  function ceiling() {
+    let b = 0;
+    for (const e of [nameTag, doorBtn]) if (e && e.offsetHeight && e.offsetParent) b = Math.max(b, e.offsetTop + e.offsetHeight);
+    return b ? b + 8 : 0;
+  }
   function tagBottom() { const tag = nameTag && nameTag.getBoundingClientRect(); return tag && tag.height ? tag.bottom - App.ui.getBoundingClientRect().top + 10 : 140; }
   function bindRoom() {
     Room.bind({ d, c, env, fx: fxp, arranging: () => drawer.dataset.open === 'things', keep: () => App.keepSoon(c), G: () => ({ ...roomG, wallTop: tagBottom() }),
@@ -7400,6 +7410,7 @@ const World = (() => {
       if (grow.t >= 0.6) grow = null;
     }
     think(dt);
+    env.ceil = ceiling();
     c.step(dt, env);
     stepPals(dt);
     GrowHud.step(dt);
