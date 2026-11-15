@@ -4723,6 +4723,7 @@ const Codec = (() => {
       for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
       let k = 0;
       const rd = () => { if (k >= b.length) throw new Error('short'); return b[k++]; };
+      let homeAt = b.length;                                // where her home starts in the code, if it came
       if (rd() !== 1) return null;
       const d = newCreatureData();
       d.color = rgbToHex(rd(), rd(), rd());
@@ -4776,7 +4777,7 @@ const Codec = (() => {
             if (k < b.length) { const n = rd(); G.crest = {}; for (let i = 0; i < n; i++) { const lk = rd(), x = rd(), y = rd(), sz = rd(), r = rd(); G.crest[lk] = x === 255 ? 0 : [x / 200 - 0.1, y / 200 - 0.1, sz / 60, (r / 255) * TAU - Math.PI]; } }
           }
           if (k < b.length && b[k] === 3) {                 // her home, when it travelled (otherwise she opens with the starter room)
-            k++;
+            homeAt = k; k++;
             const h = rd(), scene = PLACE_LIST[h & 7] || 'meadow', wall = PALETTE[h >> 3] || null, n = rd(), things = [];
             for (let i = 0; i < n; i++) {
               const f = rd(), v = (rd() << 8) | rd(), kind = ROOM_KINDS[f & 7];
@@ -4786,9 +4787,10 @@ const Codec = (() => {
           }
         } catch (e) { /* a cut-off ending: keep the doodling, with whatever was read */ }
       }
-      // the same link always lands on the same shelf spot; a changed doodling is a new arrival
+      // the same link always lands on the same shelf spot; a changed doodling is a new arrival. Its home is left out of this:
+      // a friend is the same friend whether or not its home changed (2026-11-15), and a code from before homes travelled reads as it did
       let h = 2166136261;
-      for (let i = 0; i < b.length; i++) h = Math.imul(h ^ b[i], 16777619);
+      for (let i = 0; i < homeAt; i++) h = Math.imul(h ^ b[i], 16777619);
       d.id = 'x' + (h >>> 0).toString(36);
       return cleanCreature(d);
     } catch (e) { return null; }
@@ -6835,7 +6837,7 @@ const World = (() => {
     return lastTag;
   }
   function bindRoom() {
-    Room.bind({ d: host || d, c, env, fx: fxp, arranging: () => drawer.dataset.open === 'things', keep: () => App.keepSoon(c), G: () => ({ ...roomG, wallTop: wallTop() }),
+    Room.bind({ d: host || d, c, env, fx: fxp, arranging: () => drawer.dataset.open === 'things', keep: () => { App.keepSoon(c); if (host && host.guest) App.saveGuests(); }, G: () => ({ ...roomG, wallTop: wallTop() }),
       // sideways the tray stands at the right: the room lays its things out to the left of it while it is open
       reserve: () => 0,   // arranging no longer squeezes the room: it is the room she plays in
       repaint: () => layout() });
@@ -6847,8 +6849,8 @@ const World = (() => {
     if (drawer.dataset.open) openDrawer(drawer.dataset.open);   // close whatever drawer is open
     host = null; setPlace('room');
   }
-  // the friends playing who live on this device (not visitors by code, not ones met on the trail): their homes can be gone round to
-  const homeFriends = () => pals.map((p) => p.c.d).filter((pd) => !pd.guest && App.list.includes(pd));
+  // the friends playing who have a home here: this device's own doodlings, and visitors who came by code (their home came with them, kept with them here)
+  const homeFriends = () => pals.map((p) => p.c.d).filter((pd) => (pd.guest ? App.guests.includes(pd) : App.list.includes(pd)));
   // going round to a friend's home: the friend is already there, and lets her in
   function goFriend(pd) {
     if (busy()) return;
