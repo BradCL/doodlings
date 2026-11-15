@@ -113,6 +113,27 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--paper)
 .confirmbox .row { display: flex; gap: 34px; }
 .confirmbox .btn, .confirmbox .btn.ghost { --btn: 64px; }
 .btn.danger { background: var(--coral); color: #fff; }
+/* a doodling arrives: the phone looking at a code, right of the plus, mirroring where the way back appears on its left */
+.readbtn { position: absolute; left: calc(50% + 46px + 28px); bottom: calc(7vh + var(--sab) + 10px); width: 72px; height: 72px; padding: 12px 18px; border: 0; border-radius: 50%; background: var(--card);
+  box-shadow: 0 4px 0 rgba(43,45,66,.13), 0 8px 18px rgba(43,45,66,.16); display: grid; place-items: center; cursor: pointer; }
+.readbtn[hidden] { display: none; }
+.readbtn svg { width: 100%; height: 100%; pointer-events: none; }
+/* the camera inside the toy: the picture fills the screen, a soft square to aim at, one way back */
+.overlay.scan { background: #1b1830; z-index: 45; }
+.overlay.scan.on { display: block; }
+.overlay.scan video, .overlay.scan .still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }   /* cover: the screen shows part of the frame, so the square is always inside what the reader sees */
+.overlay.scan .still { display: none; } .overlay.scan.read .still { display: block; }
+.overlay.scan .aim { position: absolute; left: 50%; top: 50%; width: 80vmin; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 28px;
+  box-shadow: 0 0 0 4px rgba(255,255,255,.85), 0 0 0 100vmax rgba(27,24,48,.38); transition: box-shadow .2s; pointer-events: none; }
+.overlay.scan.read .aim { box-shadow: 0 0 0 10px var(--sun), 0 0 0 100vmax rgba(255,201,40,.25); }
+.overlay.scan .scanback { position: absolute; top: calc(12px + var(--sat)); left: 12px; }
+.overlay.scan .refused { display: none; position: absolute; left: 50%; top: 50%; width: 110px; height: 160px; transform: translate(-50%, -50%); pointer-events: none; }
+.overlay.scan .refused svg { width: 100%; height: 100%; opacity: .55; }
+.overlay.scan .refused .no { position: absolute; right: -18px; bottom: -10px; width: 52px; height: 52px; border-radius: 50%; background: var(--coral) no-repeat center/26px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round'%3E%3Cpath d='M6 6l12 12M18 6L6 18'/%3E%3C/svg%3E"); box-shadow: 0 0 0 4px #1b1830; }
+.overlay.scan.denied .refused { display: block; }
+.overlay.scan .readout { display: none; position: absolute; left: 50%; bottom: calc(14px + var(--sab)); transform: translateX(-50%); padding: 3px 10px; border-radius: 8px; background: rgba(27,24,48,.75); color: #fff; font: 600 12px/1.4 ui-monospace, Menlo, monospace; pointer-events: none; }
+.overlay.scan .readout.on { display: block; }
+.overlay.scan.denied .aim, .overlay.scan.denied video { display: none; }
 .backbtn { position: absolute; left: calc(50% - 46px - 100px); bottom: calc(7vh + var(--sab) + 10px); width: 72px; height: 72px; padding: 0; border: 0; border-radius: 50%; background: var(--card);
   box-shadow: 0 4px 0 rgba(43,45,66,.13), 0 8px 18px rgba(43,45,66,.16); display: none; place-items: center; cursor: pointer; }
 .backbtn.on { display: grid; animation: pop .3s cubic-bezier(.3,1.4,.5,1); }
@@ -1043,9 +1064,276 @@ const QR = (() => {
   return { encode, draw };
 })();
 
+// ===== reader.js =====
+function makeReader() {
+// Pixel QR reader. Byte mode, versions 1 to 40, L/M/Q/H. No page state.
+const Reader = (() => {
+  const ECC = [[7,10,15,20,26,18,20,24,30,18,20,24,26,30,22,24,28,30,28,28,28,28,30,30,26,28,30,30,30,30,30,30,30,30,30,30,30,30,30,30],[10,16,26,18,24,16,18,22,22,26,30,22,22,24,24,28,28,26,26,26,26,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28],[13,22,18,26,18,24,18,22,20,24,28,26,24,20,30,24,28,28,26,30,28,30,30,30,30,28,30,30,30,30,30,30,30,30,30,30,30,30,30,30],[17,28,22,16,22,28,26,26,24,28,24,28,22,24,24,30,28,28,26,28,30,24,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30]];
+  const BLOCKS = [[1,1,1,1,1,2,2,2,2,4,4,4,4,4,6,6,6,6,7,8,8,9,9,10,12,12,12,13,14,15,16,17,18,19,19,20,21,22,24,25],[1,1,1,2,2,4,4,4,5,5,5,8,9,9,10,10,11,13,14,16,17,17,18,20,21,23,25,26,28,29,31,33,35,37,38,40,43,45,47,49],[1,1,2,2,4,4,6,6,8,8,8,10,12,16,12,17,16,18,21,20,23,23,25,27,29,34,34,35,38,40,43,45,48,51,53,56,59,62,65,68],[1,1,2,4,4,4,5,6,8,8,11,11,16,16,18,16,19,21,25,25,25,34,30,32,35,37,40,42,45,48,51,54,57,60,63,66,70,74,77,81]];
+  const exp = new Uint8Array(512), log = new Uint8Array(256);
+  for (let i = 0, x = 1; i < 255; i++) { exp[i] = x; log[x] = i; x = (x << 1) ^ (x & 128 ? 0x11D : 0); }
+  for (let i = 255; i < 512; i++) exp[i] = exp[i - 255];
+  const mul = (a,b) => a && b ? exp[log[a] + log[b]] : 0;
+  const div = (a,b) => a ? exp[(log[a] - log[b] + 255) % 255] : 0;
+  const poly = (a,x) => a.reduceRight((s,c) => mul(s,x) ^ c, 0);
+  // Berlekamp-Massey finds the locator; solve the small Vandermonde system
+  // for magnitudes, then verify every syndrome again before trusting a block.
+  function correct(bytes, degree) {
+    const synd = () => Array.from({length:degree}, (_,i) => bytes.reduce((s,c) => mul(s,exp[i]) ^ c,0));
+    const s = synd();
+    if (!s.some(Boolean)) return bytes;
+    let c = [1], b = [1], len = 0, shift = 1, last = 1;
+    for (let n = 0; n < degree; n++) {
+      let d = s[n];
+      for (let j = 1; j <= len; j++) d ^= mul(c[j] || 0,s[n-j]);
+      if (!d) { shift++; continue; }
+      const old = c.slice(), factor = div(d,last);
+      while (c.length < b.length + shift) c.push(0);
+      b.forEach((v,j) => { c[j+shift] ^= mul(v,factor); });
+      if (2*len <= n) { len = n+1-len; b = old; last = d; shift = 1; } else shift++;
+    }
+    if (!len || len*2 > degree) return null;
+    const at = [], roots = [];
+    for (let j = 0; j < bytes.length; j++) {
+      const p = bytes.length-1-j;
+      if (!poly(c,exp[(255-p)%255])) { at.push(j); roots.push(exp[p]); }
+    }
+    if (at.length !== len) return null;
+    const a = Array.from({length:len}, (_,i) => [...roots.map(r => i ? exp[log[r]*i%255] : 1), s[i]]);
+    for (let k = 0; k < len; k++) {
+      let row = k; while (row < len && !a[row][k]) row++;
+      if (row === len) return null;
+      [a[k],a[row]] = [a[row],a[k]];
+      const f = a[k][k]; for (let j = k; j <= len; j++) a[k][j] = div(a[k][j],f);
+      for (let i = 0; i < len; i++) if (i !== k) {
+        const v = a[i][k]; for (let j = k; j <= len; j++) a[i][j] ^= mul(v,a[k][j]);
+      }
+    }
+    at.forEach((p,i) => { bytes[p] ^= a[i][len]; });
+    return synd().some(Boolean) ? null : bytes;
+  }
+  function bch(value, shift, generator) {
+    let r = value;
+    for (let i = 0; i < shift; i++) r = (r << 1) ^ ((r >>> (Math.floor(Math.log2(generator))-1)) * generator);
+    return (value << shift) | r;
+  }
+  function nearest(a,b,values) {
+    let best = null, score = 4;
+    const distance = n => { let c = 0; for (; n; n &= n-1) c++; return c; };
+    for (const [value,word] of values) {
+      const d = Math.min(distance(a^word),distance(b^word));
+      if (d < score) { best = value; score = d; }
+      else if (d === score) best = null;
+    }
+    return best;
+  }
+  function centers(v) {
+    if (v === 1) return [];
+    const count = Math.floor(v/7)+2, n = 17+4*v;
+    const step = v === 32 ? 26 : Math.floor((v*4+count*2+1)/(count*2-2))*2, out = [6];
+    for (let p = n-7; out.length < count; p -= step) out.splice(1,0,p);
+    return out;
+  }
+  const masks = [(x,y)=>(x+y)%2===0,(x,y)=>y%2===0,(x,y)=>x%3===0,(x,y)=>(x+y)%3===0,
+    (x,y)=>(Math.floor(y/2)+Math.floor(x/3))%2===0,(x,y)=>x*y%2+x*y%3===0,
+    (x,y)=>(x*y%2+x*y%3)%2===0,(x,y)=>((x+y)%2+x*y%3)%2===0];
+  function decode(m,n) {
+    const get = (x,y) => m[y*n+x], v = (n-17)/4;
+    let a = 0, b = 0;
+    const coords = [...Array.from({length:6},(_,i)=>[8,i]),[8,7],[8,8],[7,8],...Array.from({length:6},(_,i)=>[5-i,8])];
+    coords.forEach(([x,y],i) => { a |= get(x,y)<<i; });
+    for (let i=0;i<15;i++) b |= (i<8 ? get(n-1-i,8) : get(8,n-15+i))<<i;
+    const f = nearest(a,b,Array.from({length:32},(_,i)=>[i,bch(i,10,0x537)^0x5412]));
+    if (f === null) return null;
+    if (v >= 7) {
+      a=0;b=0;
+      for (let i=0;i<18;i++) { const x=n-11+i%3,y=Math.floor(i/3); a|=get(x,y)<<i;b|=get(y,x)<<i; }
+      if (nearest(a,b,Array.from({length:34},(_,i)=>[i+7,bch(i+7,12,0x1F25)])) !== v) return null;
+    }
+    const e = [1,0,3,2][f>>3], mask = f&7, fixed = new Uint8Array(n*n);
+    const mark = (x,y) => { if (x>=0&&y>=0&&x<n&&y<n) fixed[y*n+x]=1; };
+    for (let i=0;i<n;i++) { mark(6,i);mark(i,6); }
+    for (const [cx,cy] of [[3,3],[n-4,3],[3,n-4]]) for(let y=-4;y<=4;y++) for(let x=-4;x<=4;x++) mark(cx+x,cy+y);
+    for (const x of centers(v)) for (const y of centers(v)) {
+      if ((x===6&&(y===6||y===n-7))||(x===n-7&&y===6)) continue;
+      for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++) mark(x+dx,y+dy);
+    }
+    coords.forEach(([x,y])=>mark(x,y));
+    for(let i=0;i<15;i++) i<8?mark(n-1-i,8):mark(8,n-15+i);
+    mark(8,n-8);
+    if(v>=7) for(let i=0;i<18;i++){const x=n-11+i%3,y=Math.floor(i/3);mark(x,y);mark(y,x);}
+    const bits=[];
+    for(let r=n-1;r>=1;r-=2){if(r===6)r=5;for(let t=0;t<n;t++){
+      const y=((r+1)&2)===0?n-1-t:t;
+      for(let j=0;j<2;j++){const x=r-j;if(!fixed[y*n+x])bits.push(get(x,y)^+masks[mask](x,y));}
+    }}
+    const words=[];for(let i=0;i+7<bits.length;i+=8)words.push(bits.slice(i,i+8).reduce((s,b)=>s*2+b,0));
+    const count=BLOCKS[e][v-1],degree=ECC[e][v-1],short=count-words.length%count,len=Math.floor(words.length/count)-degree;
+    const blocks=Array.from({length:count},(_,i)=>new Uint8Array(len+(i>=short?1:0)+degree));
+    let pos=0;
+    for(let i=0;i<=len;i++)for(const block of blocks)if(i<block.length-degree)block[i]=words[pos++];
+    for(let i=0;i<degree;i++)for(const block of blocks)block[block.length-degree+i]=words[pos++];
+    const data=[];
+    for(const block of blocks){if(!correct(block,degree))return null;data.push(...block.slice(0,-degree));}
+    let p=0;
+    const take = k => {if(p+k>data.length*8)throw Error();let s=0;while(k--)s=s*2+((data[p>>3]>>(7-(p++&7)))&1);return s;};
+    try {
+      if(take(4)!==4)return null;
+      const length=take(v<10?8:16),bytes=new Uint8Array(length);
+      for(let i=0;i<length;i++)bytes[i]=take(8);
+      // The encoder writes one byte segment, a zero terminator and alternating pads.
+      const end=Math.min(4,data.length*8-p);if(take(end)!==0)return null;
+      while(p%8)if(take(1))return null;
+      for(let pad=0;p<data.length*8;pad++)if(take(8)!==(pad%2?0x11:0xEC))return null;
+      return new TextDecoder('utf-8',{fatal:true}).decode(bytes);
+    } catch { return null; }
+  }
+  function threshold(rgba,w,h) {
+    const gray=new Uint8Array(w*h),stride=w+1,sum=new Float64Array((w+1)*(h+1));
+    for(let y=0;y<h;y++){let row=0;for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4;gray[i]=(rgba[p]*77+rgba[p+1]*150+rgba[p+2]*29)>>8;
+      row+=gray[i];sum[(y+1)*stride+x+1]=sum[y*stride+x+1]+row;
+    }}
+    const out=new Uint8Array(w*h),r=24;
+    for(let y=0;y<h;y++){const top=Math.max(0,y-r),bottom=Math.min(h,y+r+1);
+      for(let x=0;x<w;x++){const left=Math.max(0,x-r),right=Math.min(w,x+r+1);
+        const mean=(sum[bottom*stride+right]-sum[top*stride+right]-sum[bottom*stride+left]+sum[top*stride+left])/((bottom-top)*(right-left));
+        const l=Math.max(0,x-2),rr=Math.min(w,x+3),t=Math.max(0,y-2),bb=Math.min(h,y+3);
+        const nearby=(sum[bb*stride+rr]-sum[t*stride+rr]-sum[bb*stride+l]+sum[t*stride+l])/((bb-t)*(rr-l));
+        const value=gray[y*w+x]+1.8*(gray[y*w+x]-nearby);
+        out[y*w+x]=+(value<mean-5);
+      }
+    }
+    return out;
+  }
+  function find(m,w,h) {
+    const found=[],pixel=(x,y)=>x>=0&&y>=0&&x<w&&y<h?m[y*w+x]:0;
+    const ratio = r => {const u=r.reduce((a,b)=>a+b,0)/7;return u>=1&&r.every((v,i)=>Math.abs(v-u*(i===2?3:1))<u*(i===2?1.5:.8));};
+    function cross(x,y,dx,dy,max) {
+      const r=[0,0,0,0,0];
+      let a=0;while(a<max&&pixel(x-a*dx,y-a*dy)){r[2]++;a++;}
+      while(a<max&&!pixel(x-a*dx,y-a*dy)){r[1]++;a++;}
+      while(a<max&&pixel(x-a*dx,y-a*dy)){r[0]++;a++;}
+      let b=1;while(b<max&&pixel(x+b*dx,y+b*dy)){r[2]++;b++;}
+      while(b<max&&!pixel(x+b*dx,y+b*dy)){r[3]++;b++;}
+      while(b<max&&pixel(x+b*dx,y+b*dy)){r[4]++;b++;}
+      if(!ratio(r))return null;
+      return {offset:(b-r[4]-r[3]-r[2]/2),u:r.reduce((a,b)=>a+b,0)/7};
+    }
+    for(let y=0;y<h;y+=2){let runs=[],color=0,start=0;
+      for(let x=0;x<=w;x++){const c=x<w?pixel(x,y):0;if(c===color)continue;
+        runs.push({n:x-start,end:x,color});start=x;color=c;if(runs.length>5)runs.shift();
+        if(runs.length!==5||runs[0].color!==1||!ratio(runs.map(r=>r.n)))continue;
+        const u=runs.reduce((s,r)=>s+r.n,0)/7,cx=Math.round(x-runs[4].n-runs[3].n-runs[2].n/2);
+        const vertical=cross(cx,y,0,1,Math.ceil(10*u));if(!vertical)continue;
+        const cy=Math.round(y+vertical.offset),horizontal=cross(cx,cy,1,0,Math.ceil(10*u));if(!horizontal)continue;
+        const xx=cx+horizontal.offset,yy=y+vertical.offset,size=(horizontal.u+vertical.u)/2;
+        let hit=found.find(p=>Math.hypot(p.x-xx,p.y-yy)<size*2&&Math.abs(p.u-size)<size);
+        if(hit){const t=++hit.count;hit.x+=(xx-hit.x)/t;hit.y+=(yy-hit.y)/t;hit.u+=(size-hit.u)/t;}
+        else found.push({x:xx,y:yy,u:size,count:1});
+      }
+    }
+    return found.filter(p=>p.count>=2).sort((a,b)=>b.count-a.count).slice(0,24);
+  }
+  // Least squares homography. Coordinates in modules keep the fit well scaled.
+  function fit(points) {
+    const a=Array.from({length:8},()=>Array(9).fill(0));
+    for(const [x,y,u,v] of points)for(const row of [[x,y,1,0,0,0,-u*x,-u*y,u],[0,0,0,x,y,1,-v*x,-v*y,v]])
+      for(let i=0;i<8;i++)for(let j=0;j<9;j++)a[i][j]+=row[i]*row[j];
+    for(let k=0;k<8;k++){
+      let r=k;for(let i=k+1;i<8;i++)if(Math.abs(a[i][k])>Math.abs(a[r][k]))r=i;
+      if(Math.abs(a[r][k])<1e-9)return null;
+      [a[k],a[r]]=[a[r],a[k]];const d=a[k][k];for(let j=k;j<9;j++)a[k][j]/=d;
+      for(let i=0;i<8;i++)if(i!==k){const f=a[i][k];for(let j=k;j<9;j++)a[i][j]-=f*a[k][j];}
+    }
+    const c=a.map(r=>r[8]);return (x,y)=>{const d=c[6]*x+c[7]*y+1;return [(c[0]*x+c[1]*y+c[2])/d,(c[3]*x+c[4]*y+c[5])/d];};
+  }
+  function sample(m,w,h,tl,tr,bl,n,align=true) {
+    const span=n-7,ax=(tr.x-tl.x)/span,ay=(tr.y-tl.y)/span,bx=(bl.x-tl.x)/span,by=(bl.y-tl.y)/span;
+    let map=(x,y)=>[tl.x+(x-3)*ax+(y-3)*bx,tl.y+(x-3)*ay+(y-3)*by];
+    const points=[[3,3,tl.x,tl.y],[n-4,3,tr.x,tr.y],[3,n-4,bl.x,bl.y]];
+    const pixel=(x,y)=>{x=Math.floor(x);y=Math.floor(y);return x>=0&&y>=0&&x<w&&y<h?m[y*w+x]:0;};
+    const cs=centers((n-17)/4);
+    if(cs.length&&align){
+      // Three finders leave two perspective terms undetermined. The repeated
+      // alignment marks select them using only known modules, never payload bits.
+      const marks=[];
+      for(const x of cs)for(const y of cs){
+        if((x===6&&(y===6||y===n-7))||(x===n-7&&y===6))continue;
+        for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)marks.push([x+dx,y+dy,+(Math.max(Math.abs(dx),Math.abs(dy))!==1)]);
+      }
+      const project=(g,h)=>(x,y)=>{
+        const u=(x-3)/span,v=(y-3)/span,d=1+g*u+h*v;
+        return [(tl.x+((1+g)*tr.x-tl.x)*u+((1+h)*bl.x-tl.x)*v)/d,
+          (tl.y+((1+g)*tr.y-tl.y)*u+((1+h)*bl.y-tl.y)*v)/d];
+      };
+      const score=fn=>{let bad=0;for(const [x,y,bit] of marks){const [px,py]=fn(x,y);bad+=+(pixel(px,py)!==bit);}return bad;};
+      let g=0,h=0,best=score(map);
+      for(const [radius,step] of [[.24,.03],[.03,.006],[.006,.0012]]){
+        const cg=g,ch=h;
+        for(let a=cg-radius;a<=cg+radius+1e-8;a+=step)for(let b=ch-radius;b<=ch+radius+1e-8;b+=step){
+          const fn=project(a,b),cost=score(fn);
+          if(cost<best){best=cost;g=a;h=b;map=fn;}
+        }
+        if(best>marks.length*.34)return null;
+      }
+      // Refine each mark in its own local projected basis, then fit them all.
+      for(const x of cs)for(const y of cs){
+        if((x===6&&(y===6||y===n-7))||(x===n-7&&y===6))continue;
+        const [px,py]=map(x,y),[xx,xy]=map(x+1,y),[yx,yy]=map(x,y+1);
+        const ax=xx-px,ay=xy-py,bx=yx-px,by=yy-py,u=Math.min(Math.hypot(ax,ay),Math.hypot(bx,by));
+        let best=Infinity,point=null;
+        for(let dy=-u*.6;dy<=u*.6;dy+=.4)for(let dx=-u*.6;dx<=u*.6;dx+=.4){
+          let bad=0;
+          for(let j=-2.2;j<=2.2;j+=.55)for(let i=-2.2;i<=2.2;i+=.55){
+            const d=Math.max(Math.abs(Math.round(i)),Math.abs(Math.round(j)));
+            bad+=+(pixel(px+dx+i*ax+j*bx,py+dy+i*ay+j*by)!==+(d!==1));
+          }
+          const cost=bad+Math.hypot(dx,dy)/u;
+          if(cost<best){best=cost;point=[x,y,px+dx,py+dy];}
+        }
+        if(best<8)points.push(point);
+      }
+      if(points.length>3)map=fit(points)||map;
+    }
+    const out=new Uint8Array(n*n);
+    for(let y=0;y<n;y++)for(let x=0;x<n;x++){const [px,py]=map(x,y);out[y*n+x]=pixel(px,py);}
+    return out;
+  }
+  function read(rgba,width,height) {
+    if(!(rgba instanceof Uint8ClampedArray)||!Number.isInteger(width)||!Number.isInteger(height)||width<21||height<21||rgba.length!==width*height*4)return null;
+    const m=threshold(rgba,width,height),f=find(m,width,height);
+    for(let i=0;i<f.length;i++)for(let j=0;j<f.length;j++)for(let k=j+1;k<f.length;k++){
+      if(i===j||i===k)continue;
+      const tl=f[i];let tr=f[j],bl=f[k];
+      let ax=tr.x-tl.x,ay=tr.y-tl.y,bx=bl.x-tl.x,by=bl.y-tl.y;
+      const a=Math.hypot(ax,ay),b=Math.hypot(bx,by);
+      if(Math.max(tl.u,tr.u,bl.u)>Math.min(tl.u,tr.u,bl.u)*1.45||a<tl.u*12||b<tl.u*12||a/b<.6||a/b>1.7||Math.abs(ax*bx+ay*by)>a*b*.3)continue;
+      if(ax*by-ay*bx<0)[tr,bl]=[bl,tr];
+      const guess=Math.round(((a+b)/2/((tl.u+tr.u+bl.u)/3)+7-17)/4);
+      for(const delta of [0,-1,1,-2,2]){
+        const v=guess+delta;if(v<1||v>40)continue;
+        const n=17+4*v;
+        for(const align of [false,true]){
+          const grid=sample(m,width,height,tl,tr,bl,n,align);
+          const result=grid?decode(grid,n):null;
+          if(result!==null)return result;
+        }
+      }
+    }
+    return null;
+  }
+  return { read };
+})();
+
+return Reader;
+}
+const Reader = makeReader();
 // ===== ui.js =====
 // ---------- UI helpers: icons, buttons ----------
 const _svg = (inner, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${inner}</svg>`;
+// the phone held up to a code, its back toward it, a small square on its screen: on the sending screen, and on the home shelf's way to read a code
+const PHONE_PIC = '<svg viewBox="0 0 40 66"><rect x="3" y="3" width="34" height="60" rx="7" fill="#fff" stroke="#2B2D42" stroke-width="3"/><rect x="8" y="10" width="24" height="40" rx="2" fill="#DDF0FA"/><path d="M13 22v-5h5M27 22v-5h-5M13 38v5h5M27 38v5h-5" fill="none" stroke="#2B2D42" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="16" y="26" width="8" height="8" rx="1" fill="#2B2D42"/><circle cx="20" cy="56.500" r="2.200" fill="#2B2D42"/></svg>';
 const ICONS = {
   home: _svg('<path d="M3.5 11.5 12 4l8.500 7.500"/><path d="M6 10.500V19.500h12v-9"/><path d="M10 19.500v-5h4v5"/>'),
   next: _svg('<path d="M5 12h14M13 6l6 6-6 6"/>', 'stroke-width="2.800"'),
@@ -7787,7 +8075,7 @@ function drawWordmark(g, cx, cy, h, look, blink, color = INK) {
 const Card = (() => {
   const CW = 1080, CH = 1440;
   // the phone held up to the code: its back toward the code, a small square on its screen
-  const PHONE_PIC = '<svg viewBox="0 0 40 66"><rect x="3" y="3" width="34" height="60" rx="7" fill="#fff" stroke="#2B2D42" stroke-width="3"/><rect x="8" y="10" width="24" height="40" rx="2" fill="#DDF0FA"/><path d="M13 22v-5h5M27 22v-5h-5M13 38v5h5M27 38v5h-5" fill="none" stroke="#2B2D42" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="16" y="26" width="8" height="8" rx="1" fill="#2B2D42"/><circle cx="20" cy="56.500" r="2.200" fill="#2B2D42"/></svg>';
+  // the phone held up to the code: PHONE_PIC, in src/ui.js (the home shelf's way to read a code wears it too)
   let root, cv, g, nameInput, homeBtn, visitBtn, fileBtn, qrWrap, qrCv, qrKind, c = null, d = null, link = null, qr = null, friends = [];
 
   function build() {
@@ -10767,7 +11055,7 @@ const Home = (() => {
   let root, addBtn, crew = [], env = { g: 2000, floor: 0, left: 0, right: 0, top: -400 }, S = 60, t = 0;
   let press = null, doomed = null, look = { x: 0, y: 0 }, blink = 0, blinkT = 2;
   let page = 0, pages = 1, prevBtn, nextBtn, waitC = null;
-  let conf, confBox, asking = null, backBtn, gone = null;   // the extra check before throwing a doodling away, and the way back after
+  let conf, confBox, asking = null, backBtn, gone = null, readBtn;   // the extra check before throwing a doodling away, and the way back after
 
   function build() {
     root = el('div', 'screen home', App.ui);
@@ -10780,6 +11068,11 @@ const Home = (() => {
     // more doodlings than fit on the shelf: turn the page
     prevBtn = iconBtn('back', 'ghost shelfnav left', root, 'Newer doodlings', () => { Sound.sfx('page'); page--; enter(); });
     nextBtn = iconBtn('next', 'ghost shelfnav right', root, 'Earlier doodlings', () => { Sound.sfx('page'); page++; enter(); });
+    // a doodling arrives: the phone looking at a code, right of the plus. Only where the toy can use a camera (a secure page that offers one)
+    readBtn = el('button', 'readbtn', root, PHONE_PIC); readBtn.type = 'button'; readBtn.setAttribute('aria-label', 'Read a code');
+    readBtn.addEventListener('click', () => { Sound.unlock(); Sound.sfx('page'); Scan.open(); });
+    Scan.canOffer().then((ok) => { readBtn.hidden = !ok; });
+    readBtn.hidden = true;
     // after the red cross, one more step: the doodling, large, and two buttons. The cross closes it and keeps her; the bin throws her away
     conf = el('div', 'overlay confirm', root);
     confBox = el('div', 'confirmbox', conf);
@@ -10859,7 +11152,7 @@ const Home = (() => {
     addBtn.classList.toggle('pulse', !all.length || !!App.waiting);
     root.classList.add('on');
   }
-  function exit() { root.classList.remove('on'); gone = null; asking = null; backBtn.classList.remove('on'); conf.classList.remove('on'); }
+  function exit() { Scan.close(); root.classList.remove('on'); gone = null; asking = null; backBtn.classList.remove('on'); conf.classList.remove('on'); }
 
   function at(p) { for (let i = crew.length - 1; i >= 0; i--) if (crew[i].c.hit(p.x, p.y, 1.3)) return crew[i]; return null; }
 
@@ -10987,6 +11280,92 @@ const Guide = (() => {
   return { open, probe };
 })();
 
+// ---------- Scan: the toy reads a code with the camera, so a doodling arrives where her doodlings live ----------
+// The picture fills the screen with a soft square to aim at and one way back; no words. A few times a second a frame goes to a worker
+// running the toy's own reader (src/reader.js, wrapped by the build so its source can start the worker). A Doodlings code (#d= or #v=)
+// arrives as that link would; any other code is passed over. The camera stops when she leaves or the toy is hidden. No frame is kept or sent.
+// The back camera at about 1920 by 1080: enough to read the toy's largest code from a hand's length (137 modules, at about 5 pixels each in
+// the trial, read in about 22 ms), and far less to look through than a phone's largest picture.
+const Scan = (() => {
+  let readout, looks = 0, lastMs = 0, errName = '', holdT = 0, hideT = 0, still, root, video, stream = null, worker = null, timer = 0, busy = false, live = 0, cv = null, g = null, refused = null, hold = false;   // hold: pictures only, the camera shows but nothing is read
+  async function canOffer() {
+    // not by the list of cameras: an iPhone or iPad may list none until the grown-up has said yes once. A device with no camera gets the refused picture
+    return !TAKE_HOME && /^https?:$/.test(location.protocol) && !!window.isSecureContext &&   // a hosted copy, never a file
+      !!navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia && typeof Worker !== 'undefined';
+  }
+  function build() {
+    root = el('div', 'overlay scan', App.ui);
+    video = el('video', '', root); video.muted = true; video.playsInline = true; video.autoplay = true; video.setAttribute('playsinline', ''); video.setAttribute('muted', ''); video.setAttribute('aria-hidden', 'true');
+    still = el('canvas', 'still', root); still.setAttribute('aria-hidden', 'true');   // the last picture, kept on screen while a doodling arrives
+    el('div', 'aim', root);
+    refused = el('div', 'refused', root, PHONE_PIC + '<span class="no"></span>'); refused.setAttribute('aria-hidden', 'true');
+    iconBtn('close', 'ghost scanback', root, 'Back', () => { Sound.sfx('tap'); close(); });
+    // for a grown-up reading what a camera did, never for a child: a finger held on the square for three seconds shows one small line of
+    // numbers (the camera's real size, looks so far, the last look in ms), or on the refused picture the error's name. Nothing is kept or sent
+    readout = el('div', 'readout', root); readout.setAttribute('aria-hidden', 'true');
+    const off = () => { clearTimeout(holdT); clearTimeout(hideT); readout.classList.remove('on'); };
+    root.addEventListener('pointerdown', (e) => {
+      const r = root.querySelector(root.classList.contains('denied') ? '.refused' : '.aim').getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+      off(); holdT = setTimeout(() => {
+        readout.textContent = root.classList.contains('denied') ? errName || '?' : `${video.videoWidth} x ${video.videoHeight} · ${looks} · ${Math.round(lastMs)}`;
+        readout.classList.add('on'); hideT = setTimeout(off, 5000);
+      }, 3000);
+    });
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) root.addEventListener(ev, off);
+    root.addEventListener('click', (e) => { if (root.classList.contains('denied') && e.target !== root.querySelector('.scanback')) close(); });   // refused: any tap goes back
+    document.addEventListener('visibilitychange', () => { if (document.hidden) close(); });
+  }
+  async function open() {
+    if (!root) build();
+    const token = ++live; looks = 0; lastMs = 0; errName = '';
+    root.classList.remove('denied'); root.classList.add('on');
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+      if (token !== live) { s.getTracks().forEach((t) => t.stop()); return; }
+      stream = s; video.srcObject = s; await video.play().catch(() => {});
+      if (token !== live) return;
+      const url = URL.createObjectURL(new Blob(['const Reader = (' + makeReader.toString() + ')();\nonmessage = (e) => { const t0 = performance.now(); let t = null; try { t = Reader.read(new Uint8ClampedArray(e.data.buf), e.data.w, e.data.h); } catch (err) { t = null; } postMessage({ t, ms: performance.now() - t0 }); };'], { type: 'text/javascript' }));
+      worker = new Worker(url); URL.revokeObjectURL(url);
+      worker.onmessage = (e) => { busy = false; looks++; lastMs = e.data.ms; got(e.data.t, token); };
+      worker.onerror = () => { busy = false; };
+      look(token);
+    } catch (e) {
+      if (token !== live) return;
+      errName = (e && e.name) || 'Error';
+      root.classList.add('denied'); Sound.sfx('error');   // the camera was refused or could not start: her way back is the whole screen
+    }
+  }
+  function look(token) {
+    if (token !== live || !stream) return;
+    if (!hold && !busy && video.readyState >= 2 && video.videoWidth) {
+      const w = video.videoWidth, h = video.videoHeight;
+      if (!cv) { cv = document.createElement('canvas'); g = cv.getContext('2d', { willReadFrequently: true }); }
+      if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+      g.drawImage(video, 0, 0, w, h);
+      const px = g.getImageData(0, 0, w, h);
+      busy = true; worker.postMessage({ buf: px.data.buffer, w, h }, [px.data.buffer]);
+    }
+    timer = setTimeout(() => look(token), 250);
+  }
+  function got(text, token) {
+    if (token !== live || !text || !/[#&][dv]=[\w-]+/.test(text)) return;   // not ours, or nothing yet: keep looking
+    if (cv && cv.width) { still.width = cv.width; still.height = cv.height; still.getContext('2d').drawImage(cv, 0, 0); }   // never black before she arrives
+    root.classList.add('read'); Sound.sfx('sparkle');
+    close(true);
+    setTimeout(() => App.arrive(text), 350);
+  }
+  function close(keepShown) {
+    live++; clearTimeout(timer); busy = false;
+    if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null;
+    if (video) video.srcObject = null;
+    if (worker) worker.terminate(); worker = null;
+    if (root && !keepShown) root.classList.remove('on', 'denied');
+    if (root && keepShown) setTimeout(() => root.classList.remove('on', 'read'), 350);
+  }
+  return { canOffer, open, close, hold: (on) => { hold = !!on; }, peek: () => ({ open: !!(root && root.classList.contains('on')), camera: !!stream, denied: !!(root && root.classList.contains('denied')) }) };
+})();
+
 // ---------- App: screens, input, storage, main loop ----------
 const TAKE_HOME = null; // portable creature payload
 const App = {
@@ -11045,6 +11424,28 @@ const App = {
     // Firefox on an iPhone or iPad is Safari's engine underneath, has neither, and decides quietly, so it is asked.
     if (/\bFirefox\//.test(navigator.userAgent) || (window.CSS && CSS.supports && CSS.supports('-moz-appearance', 'none'))) { this.kept = 'not asked: Firefox'; return; }
     st.persisted().then((on) => (on ? true : st.persist())).then((on) => { this.kept = on ? 'kept' : 'not kept'; }).catch(() => { this.kept = 'not kept'; });
+  },
+  // A doodling arriving: from a link opened (the address's #d= or #v=), or a code read by the toy's own camera. One way for both.
+  // A take-home code keeps it here (the same one already here opens instead); a visitor comes to play beside the newest awake doodling,
+  // or waits on the shelf until one is woken.
+  arrive(text, start = null) {
+    const m = /[#&]d=([\w-]+)/.exec(text || '');
+    if (m) {
+      const d = Codec.decode(m[1]);
+      if (d && d.outline) {
+        const same = this.list.find((x) => x.id === d.id);
+        start = this.critterFor(same || d);
+        if (!same) this.keep(start);
+      }
+    }
+    const v = /[#&]v=([\w-]+)/.exec(text || '');
+    let guest = null;
+    if (v) { const gd = Codec.decode(v[1]); if (gd && gd.outline) guest = this.hostGuest(gd); }
+    const host = guest && this.list.find((x) => x.outline && x.awake);
+    if (host) this.go('world', { critter: this.critterFor(host), from: 'home', guest });
+    else if (start && start.d.awake) this.go('world', { critter: start, from: 'home' });
+    else if (start) this.go('studio', { critter: start });
+    else { this.waiting = guest; this.go('home'); }
   },
   // remember a creature (newest first)
   keep(c) {
@@ -11151,29 +11552,9 @@ const App = {
       start = this.critterFor(this.list.find(x => x.id === carried.id) || carried);
       this.keep(start);
     }
-    const m = /[#&]d=([\w-]+)/.exec(location.hash);
-    if (m) {
-      const d = Codec.decode(m[1]);
-      if (d && d.outline) {
-        const same = this.list.find((x) => x.id === d.id);
-        start = this.critterFor(same || d);
-        if (!same) this.keep(start);
-      }
-      try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
-    }
-    // a visitor: it comes to play beside the newest doodling that lives here. Nobody home yet? It waits until one is woken.
-    const v = /[#&]v=([\w-]+)/.exec(location.hash);
-    let guest = null;
-    if (v) {
-      const gd = Codec.decode(v[1]);
-      if (gd && gd.outline) guest = this.hostGuest(gd);
-      try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
-    }
-    const host = guest && this.list.find((x) => x.outline && x.awake);
-    if (host) this.go('world', { critter: this.critterFor(host), from: 'home', guest });
-    else if (start && start.d.awake) this.go('world', { critter: start, from: 'home' });
-    else if (start) this.go('studio', { critter: start });
-    else { this.waiting = guest; this.go('home'); }
+    const hash = location.hash;   // read before the address is tidied
+    if (/[#&][dv]=/.test(hash)) try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+    this.arrive(hash, start);
 
     // hosted copies keep working without a connection after the first visit
     if (!TAKE_HOME && /^https?:$/.test(location.protocol) && 'serviceWorker' in navigator) {
@@ -11286,7 +11667,8 @@ window.__doodArt = {
 };
 
 // the drawing internals, for contact sheets (tools/look.mjs)
-window.__doodKit = { App, Places, Room, ROOM_THINGS, ROOM_PAINT, PARTS, PART_TRAYS, PLACE_LIST, QUESTS, PONDS, VOICE_LIST, TUNE_LIST, drawPartThumb, makeDemo, Critter, worldTheme, PALETTE,
+window.__doodReaderSource = () => makeReader.toString();   // for the lab's timing of one look
+window.__doodKit = { Scan, QR, App, Places, Room, ROOM_THINGS, ROOM_PAINT, PARTS, PART_TRAYS, PLACE_LIST, QUESTS, PONDS, VOICE_LIST, TUNE_LIST, drawPartThumb, makeDemo, Critter, worldTheme, PALETTE,
   Shape, Snacks, newCreatureData, partTint, shade, inkOf, Grow, GrowHud, Codec, Cup, Shoot, Fair, LOOKS, PRIZES, CUPS, QUALS, SHOOT, ShootRules };
 
 })();
