@@ -215,8 +215,15 @@ input.name:focus { box-shadow: 0 0 0 4px var(--sun), 0 10px 22px rgba(43,45,66,.
 /* ----- world: places, friends, the trail button ----- */
 .topbar .gap { flex: 1; pointer-events: none; }
 .topbar .trail { --btn: 54px; }
-.panel.places, .panel.pals { grid-auto-flow: column; overflow-x: auto; overflow-y: hidden; touch-action: pan-x; scrollbar-width: none; }
-.panel.places::-webkit-scrollbar, .panel.pals::-webkit-scrollbar { display: none; }
+.thumb.scene.home { position: relative; }
+/* the places tray: the eight in their own grid, laid out as always; friends' homes in a row of their own beneath, a little apart */
+.panel.places.on { display: flex; flex-direction: column; align-items: flex-start; }
+.panel.places .eight { display: grid; gap: inherit; max-width: 100%; }
+.panel.places .homes { display: flex; gap: inherit; margin-top: 8px; }
+.thumb.scene.home { --peek: calc(var(--sw) / 1.5 * .62); overflow: visible; margin-right: calc(var(--peek) * .4); }
+.thumb.scene.home canvas.peek { position: absolute; right: calc(var(--peek) * -.4); bottom: 2px; width: var(--peek) !important; height: var(--peek) !important; border-radius: 0; pointer-events: none; }
+.panel.places .eight, .panel.pals { grid-auto-flow: column; overflow-x: auto; overflow-y: hidden; touch-action: pan-x; scrollbar-width: none; }
+.panel.places .eight::-webkit-scrollbar, .panel.pals::-webkit-scrollbar { display: none; }
 .thumb.scene { --sw: 87px; width: calc(var(--sw) + 8px); height: calc(var(--sw) / 1.5 + 8px); padding: 4px; overflow: hidden; }
 .thumb.scene canvas { width: var(--sw) !important; height: calc(var(--sw) / 1.5) !important; transform: none; border-radius: 15px; }
 .thumb.scene.on, .thumb.pal.on, .thumb.voice.on, .thumb.tune.on { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--ink); }
@@ -254,7 +261,7 @@ input.name:focus { box-shadow: 0 0 0 4px var(--sun), 0 10px 22px rgba(43,45,66,.
 
 @media (max-width: 900px) { .thumb.scene { --sw: 72px; } }
 @media (max-width: 760px) {
-  .panel.places { grid-auto-flow: row; grid-template-columns: repeat(4, auto); overflow: visible; }
+  .panel.places .eight { grid-auto-flow: row; grid-template-columns: repeat(4, auto); overflow: visible; }
   .thumb.scene { --sw: 87px; }
 }
 @media (max-width: 720px) {
@@ -278,7 +285,7 @@ input.name:focus { box-shadow: 0 0 0 4px var(--sun), 0 10px 22px rgba(43,45,66,.
 @media (max-height: 520px) and (min-width: 600px) {
   .questbar .snacks { grid-template-columns: repeat(8, auto); }
   .questbar { padding: 8px 12px; }
-  .panel.places { grid-auto-flow: column; grid-template-columns: none; overflow-x: auto; overflow-y: hidden; }
+  .panel.places .eight { grid-auto-flow: column; grid-template-columns: none; overflow-x: auto; overflow-y: hidden; }
   .thumb.scene { --sw: 60px; }
 }
 
@@ -318,14 +325,16 @@ input.tag.pulse { animation: pulse 1.5s ease-in-out infinite; box-shadow: 0 0 0 
 .tryrow .buy { --btn: 72px; }
 .panel.prizes { position: absolute; left: 0; right: 0; margin: 0 auto; width: -webkit-fit-content; width: fit-content; bottom: calc(14px + var(--sab)); grid-template-columns: repeat(5, auto); }
 .thumb.prize { width: 72px; height: 72px; }
+.panel.prizes { gap: 14px; padding: 12px; }   /* room for the chosen ring around every cell: it never meets a neighbour or the tray's edge */
 .thumb.prize.on, .thumb.lookthumb.on { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--ink); }
 .thumb.prize.far { background: rgba(255,255,255,.6); }
 .thumb.prize.far canvas { opacity: .7; }
+.thumb.prize canvas { margin: -30px; }   /* the 66 px picture is scaled to fit its cell: room to stay centred, however small the cell */
 .thumb.won { background: #FFF4CD; }
 .thumb.pal.guest { background: #E6F4FF; }
 @media (min-width: 880px) { .panel.prizes { grid-template-columns: repeat(10, auto); } }
-@media (max-width: 520px) { .thumb.prize { width: 64px; height: 64px; } .thumb.prize canvas { transform: scale(.9); } .cupbar { gap: 8px; padding: 8px; } .cupbar .btn.go { --btn: 60px; } }
-@media (max-width: 380px) { .thumb.prize { width: 58px; height: 58px; } .thumb.prize canvas { transform: scale(.82); } .cupbar .packs { gap: 5px; } }
+@media (max-width: 520px) { .thumb.prize { width: 60px; height: 60px; } .thumb.prize canvas { transform: scale(.85); } .cupbar { gap: 8px; padding: 8px; } .cupbar .btn.go { --btn: 60px; } }
+@media (max-width: 380px) { .thumb.prize { width: 50px; height: 50px; } .thumb.prize canvas { transform: scale(.7); } .cupbar .packs { gap: 5px; } }
 
 /* ----- opening a gift: try the looks on ----- */
 .overlay.moment { z-index: 45; }
@@ -369,8 +378,8 @@ input.tag.pulse { animation: pulse 1.5s ease-in-out infinite; box-shadow: 0 0 0 
   .row.parts .thumbs { flex: 0 0 100%; }
 }
 @media (max-height: 520px) and (min-width: 600px) {
-  .panel.prizes { grid-template-columns: repeat(10, auto); gap: 6px; padding: 8px; }
-  .thumb.prize { width: 58px; height: 58px; } .thumb.prize canvas { transform: scale(.82); }
+  .panel.prizes { grid-template-columns: repeat(10, auto); gap: 13px; padding: 10px; }
+  .thumb.prize { width: 52px; height: 52px; } .thumb.prize canvas { transform: scale(.74); }
 }
 
 /* ----- the room: its tray of things, and the colour dots, always there (dim when the chosen thing takes no colour) ----- */
@@ -382,11 +391,30 @@ input.tag.pulse { animation: pulse 1.5s ease-in-out infinite; box-shadow: 0 0 0 
 .panel.thingcols .swatch { background: var(--c, transparent); }
 .panel.thingcols .swatch.dim { opacity: .35; transform: none; box-shadow: none; }
 .thumb.scene.glow { animation: glow 1.4s ease-in-out infinite; }
+/* arranging the room, on a screen of its own: the play screen's buttons, name and dock step aside; the yellow tick at the top.
+   The room stays exactly as she plays in it; the tray and the colours sit on a sheet in the space the dock leaves below the floor,
+   no bigger than what it holds. All seven things show whole, never smaller than the dock's buttons. */
+.screen.arranging .topbar, .screen.arranging input.tag, .screen.arranging .dock { display: none; }
+.screen:not(.arranging) .arrdone { display: none; }
+.arrdone { position: absolute; top: calc(12px + var(--sat)); right: 68px; z-index: 8; --btn: 58px; }
+.screen.arranging { --tt: 58px; --ts: 1; --tg: 8px; }   /* the dock's button size; the tray's 58 px pictures scaled to it */
+.screen.arranging .drawer { bottom: 0; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: 100%; box-sizing: border-box; flex-direction: column; align-items: center; gap: 10px; padding: 10px 6px calc(12px + var(--sab)); background: var(--card); border-radius: 26px 26px 0 0; box-shadow: 0 -8px 24px rgba(43,45,66,.14); pointer-events: auto; }
+.screen.arranging .drawer .panel { box-shadow: none; background: transparent; animation: none; padding: 0; max-width: none; }
+.screen.arranging .drawer .panel.things.on { position: static; display: flex; gap: var(--tg); align-items: center; }
+.screen.arranging .panel.things .row.things { display: flex; gap: var(--tg); max-width: none; overflow: visible; margin: 0; padding: 0; }
+.screen.arranging .panel.things .thumb.thing { width: var(--tt); height: var(--tt); }
+.screen.arranging .panel.things .thumb.thing canvas { margin: -30px; transform: scale(var(--ts)); }
+.screen.arranging .panel.thingcols { grid-template-columns: repeat(6, auto); gap: 8px 12px; }
+@media (max-width: 520px) { .screen.arranging { --tt: 52px; --ts: .9; --tg: 3px; } }
+@media (max-width: 380px) { .screen.arranging { --tt: 48px; --ts: .83; --tg: 3px; } }
+@media (max-height: 520px) and (min-width: 600px) {   /* sideways: the tray and the colours side by side, in the band below the floor */
+  .screen.arranging .drawer { flex-direction: row; justify-content: center; gap: 22px; padding: 8px 12px calc(8px + var(--sab)); }
+  .screen.arranging .panel.thingcols { gap: 6px 8px; }
+}
 .thumb.thing.wall.on { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--ink); }
 @media (max-width: 520px) {
   .panel.things .row.things { gap: 4px; max-width: calc(100vw - 132px); } .panel.things .thumb.thing { width: 46px; height: 46px; } .panel.things .thumb.thing canvas { transform: scale(.78); }
   .panel.thingcols { grid-template-columns: repeat(6, auto); }     /* two even rows of six, as on the making screen */
-  .panel.places { grid-template-columns: repeat(3, auto) !important; }   /* nine places: three rows of three */
 }
 @media (max-height: 520px) and (min-width: 600px) {   /* sideways the floor is just above the dock: the things stand at the side, the dots in one row above the dock */
   .drawer .panel.things { position: absolute; right: 10px; bottom: 50px; padding: 7px; grid-auto-flow: row; justify-items: start; }
@@ -398,15 +426,14 @@ input.tag.pulse { animation: pulse 1.5s ease-in-out infinite; box-shadow: 0 0 0 
 
 /* her room, painted small beside the name: always on the play screen, one tap goes there. The painting fills the button
    with the same thin rim as the places drawer's paintings; in the room the ring goes round the outside */
-.door { position: absolute; z-index: 5; width: 77px; height: 54px; padding: 4px; border: 0; border-radius: 15px; background: #fff; cursor: pointer; touch-action: manipulation;
-  display: grid; place-items: center; box-shadow: 0 3px 0 rgba(43,45,66,.13), 0 6px 14px rgba(43,45,66,.12); transition: transform .16s cubic-bezier(.3,1.6,.5,1); }
-.door canvas { width: 69px !important; height: 46px !important; border-radius: 11px; pointer-events: none; display: block; }
+.door { flex: none; width: calc(var(--btn) * 1.5); height: var(--btn); padding: 4px; border: 0; border-radius: calc(var(--btn) * .3); background: #fff; cursor: pointer; touch-action: manipulation;
+  display: grid; place-items: center; box-shadow: 0 4px 0 rgba(43,45,66,.16), 0 10px 22px rgba(43,45,66,.14); transition: transform .16s cubic-bezier(.3,1.6,.5,1); }
+.door canvas { width: calc(var(--btn) * 1.5 - 8px) !important; height: calc(var(--btn) - 8px) !important; border-radius: calc(var(--btn) * .3 - 4px); pointer-events: none; display: block; }
 .door:active { transform: scale(.92); }
 .door.here { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--ink); }
 .door.glow { animation: glow 1.4s ease-in-out infinite; }
-.waking .door { opacity: 0; pointer-events: none; transform: translateY(-40px); }
 /* on a small phone the name moves over a little, so her room keeps its full size with air at the edge */
-@media (max-width: 380px) { input.tag { margin-left: calc(min(190px, 50vw) / -2 + 10px); } }
+@media (max-width: 380px) { input.tag { margin-left: calc(min(190px, 50vw) / -2 + 10px); } input.tag:placeholder-shown:not(:focus) { margin-left: -13px; } }   /* empty or named, the same middle */
 
 </style>
 </head>
@@ -4155,6 +4182,15 @@ function drawCrown(g, x, y, r) {
 }
 
 // a string of little flags, hung from x0 to x1 and sagging in the middle
+// the gold frame from the prize counter, around a picture (x, y, w, h, corner radius); k scales its line weights (1 on the keepsake card)
+function drawGoldFrame(g, px, py, pw, ph, rad, k = 1) {
+  g.save(); g.lineJoin = 'round';
+  g.strokeStyle = inkOf('#FFC928'); g.lineWidth = 34 * k; g.beginPath(); g.roundRect(px, py, pw, ph, rad); g.stroke();
+  g.strokeStyle = '#FFC928'; g.lineWidth = 24 * k; g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = 5 * k; g.beginPath(); g.roundRect(px - 5 * k, py - 5 * k, pw + 10 * k, ph + 10 * k, rad + 4 * k); g.stroke();
+  for (const [x, y] of [[px, py], [px + pw, py], [px, py + ph], [px + pw, py + ph]]) { g.fillStyle = '#FFC928'; g.strokeStyle = inkOf('#FFC928'); g.lineWidth = 5 * k; g.beginPath(); g.arc(x, y, 30 * k, 0, TAU); g.fill(); g.stroke(); g.fillStyle = '#FF5A4E'; g.beginPath(); g.arc(x, y, 12 * k, 0, TAU); g.fill(); }
+  g.restore();
+}
 function drawBunting(g, x0, x1, y, sag, size, t = 0) {
   const n = Math.max(4, Math.round((x1 - x0) / (size * 1.5))), at = (u) => [lerp(x0, x1, u), y + Math.sin(u * Math.PI) * sag];
   g.save(); g.lineJoin = g.lineCap = 'round';
@@ -4600,6 +4636,7 @@ const Codec = (() => {
 
   // the order of these two lists is part of the format too: only ever append
   const FOODS = ['jelly', 'gum', 'ice', 'pea', 'pepper', 'star', 'rainbow', 'mushroom'];
+  const ROOM_KINDS = ['window', 'bed', 'rug', 'lamp', 'shelf', 'picture'];   // the things in her room, by position in a code
   const BESTS = ['soccer.shoot', 'soccer.keep', 'hockey.shoot', 'hockey.keep'].flatMap((k) => [1, 2, 3].map((n) => k + '.' + n));
 
   function pack(d, eps, trickStep, withTricks, maxStrokes, visit) {
@@ -4646,6 +4683,25 @@ const Codec = (() => {
     }
     return Uint8Array.from(b);
   }
+  // Her home, packed tight (2026-11-15; older copies stop reading before it). It goes after the painting, which is made exactly as before:
+  // a header of 3 bytes (marker, then the place outside in 3 bits and the wall as a palette place in 4, then how many things) and 3 bytes a thing:
+  // kind in 3 bits, lamp in 1, colour as a palette place in 4; across in 6 bits (64 steps), up the wall in 5 (32), size in 5 (32).
+  // At most 3 + 3 x 12 = 39 bytes, which the 137-module square holds beside the largest painting (test/rules.mjs checks the sum).
+  // Room for growth: 3 bits hold 8 kinds (6 used), 4 bits 15 palette places and "none" (12 used), 3 bits 8 places outside (8 used:
+  // a ninth place outside would need a wider field), and 4 bits a count up to 15 (12 used).
+  const pal = (h) => { const i = typeof h === 'string' ? PALETTE.findIndex((p) => p.toLowerCase() === h.toLowerCase()) : -1; return i >= 0 && i < 15 ? i : 15; };
+  function packRoom(d) {
+    const R = d.room;
+    if (!R || !Array.isArray(R.things)) return [];
+    const things = R.things.filter((o) => ROOM_KINDS.includes(o.k)).slice(0, Math.min(ROOM.max, 15));
+    const b = [3, (Math.max(0, PLACE_LIST.indexOf(R.scene)) & 7) | (pal(R.wall) << 3), things.length];
+    const q = (v, n) => Math.round(clamp01(v) * n);
+    for (const o of things) {
+      const v = (q(o.x, 63) << 10) | (q(o.y, 31) << 5) | q((o.s - ROOM.sizeMin) / (ROOM.sizeMax - ROOM.sizeMin), 31);
+      b.push(ROOM_KINDS.indexOf(o.k) | (o.on ? 8 : 0) | (pal(o.c) << 4), v >> 8, v & 255);
+    }
+    return b;
+  }
 
   // best fidelity that fits in maxBytes: loosen paint detail first, then trick detail, then drop tricks, then oldest paint
   function encode(d, maxBytes = 6000, visit = false) {
@@ -4653,6 +4709,8 @@ const Codec = (() => {
       [0.045, 6, false, 90], [0.06, 6, false, 50], [0.06, 6, false, 25], [0.08, 6, false, 12], [0.08, 6, false, 0]];
     let bytes = null;
     for (const t of tries) { bytes = pack(d, ...t, visit); if (bytes.length <= maxBytes) break; }
+    const room = packRoom(d);                                // her home goes after the painting, take-home and visiting alike, in the square's own spare room
+    if (room.length) bytes = Uint8Array.from([...bytes, ...room]);
     let s = '';
     for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
     return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -4716,6 +4774,15 @@ const Codec = (() => {
             for (let i = 0; i < BESTS.length; i += 2) { const v = rd(); if (v & 15) d.best[BESTS[i]] = v & 15; if (v >> 4) d.best[BESTS[i + 1]] = v >> 4; }
             if (k < b.length) { const n = rd(); G.gifts = []; for (let i = 0; i < n; i++) G.gifts.push(rd()); }
             if (k < b.length) { const n = rd(); G.crest = {}; for (let i = 0; i < n; i++) { const lk = rd(), x = rd(), y = rd(), sz = rd(), r = rd(); G.crest[lk] = x === 255 ? 0 : [x / 200 - 0.1, y / 200 - 0.1, sz / 60, (r / 255) * TAU - Math.PI]; } }
+          }
+          if (k < b.length && b[k] === 3) {                 // her home, when it travelled (otherwise she opens with the starter room)
+            k++;
+            const h = rd(), scene = PLACE_LIST[h & 7] || 'meadow', wall = PALETTE[h >> 3] || null, n = rd(), things = [];
+            for (let i = 0; i < n; i++) {
+              const f = rd(), v = (rd() << 8) | rd(), kind = ROOM_KINDS[f & 7];
+              if (kind) things.push({ k: kind, x: (v >> 10) / 63, y: ((v >> 5) & 31) / 31, s: ROOM.sizeMin + ((v & 31) / 31) * (ROOM.sizeMax - ROOM.sizeMin), c: PALETTE[f >> 4] || null, on: !!(f & 8) });
+            }
+            d.room = { scene, things }; if (wall) d.room.wall = wall;
           }
         } catch (e) { /* a cut-off ending: keep the doodling, with whatever was read */ }
       }
@@ -6478,7 +6545,9 @@ const World = (() => {
   let rocket = null, night = 0, dark = 0, shake = 0, flash = 0, time = 0, voiceSize = -1, clouds = [];
   let place = 'meadow', amb = null, wipe = null, toy = null, pals = [], placePanel, palPanel, tunePanel, placeBtn, palBtn, goal = 0;
   let nameTag, fairBtn, snackG = [], snackEls = [], goalAt = -99;
-  let thingPanel, colPanel, armBtn, roomG = null, grow = null, doorBtn, doorKey = '';   // doorBtn: her room, painted small beside the name     // the room: its tray, the armchair, where things go on this screen, and a size change in progress
+  let host = null, hostFrom = null;   // going round: the friend (one of this device's own doodlings) whose home she is in, and the place she came from
+  let arrDone, lastTag = 140, nameSpot = null;   // arranging the room on a screen of its own: its tick; where the name tag last sat, and where it is placed
+  let thingPanel, colPanel, armBtn, roomG = null, grow = null, doorBtn, doorKey = '';   // doorBtn (armBtn too): her room's painting, a button in the dock     // the room: its tray, the armchair, where things go on this screen, and a size change in progress
 
   const after = (t, fn) => timers.push({ t: time + t, fn });
   const busy = () => ai.busy || teach.rec || teach.perf || phase !== 'play';
@@ -6494,9 +6563,6 @@ const World = (() => {
     fairBtn = iconBtn('tent', 'primary trail', top, 'The fair', () => { Sound.sfx('page'); leaveModes(); App.keep(c); try { localStorage.setItem('doodlings.fair.v1', '1'); } catch (e) { /* ignore */ } App.go('fair', { critter: c }); });
     iconBtn('pencil', 'ghost', top, 'Change it', () => { Sound.sfx('page'); leaveModes(); App.go('studio', { critter: c }); });
     iconBtn('camera', 'ghost', top, 'Keepsake card', () => { Sound.sfx('camera'); leaveModes(); Card.open(c, pals.map((p) => p.c.d)); });
-    // her room, painted small beside the name: always there, one tap goes to it (Brad, 2026-11-14: "its home feels personal like its name")
-    doorBtn = el('button', 'door', root); doorBtn.type = 'button'; doorBtn.setAttribute('aria-label', 'Its room');
-    doorBtn.addEventListener('click', () => { Sound.unlock(); goRoom(false); });
     // its name, on a tag under the buttons: tap to write it or change it
     nameTag = el('input', 'tag', root);
     nameTag.type = 'text'; nameTag.maxLength = 14; nameTag.placeholder = '✎'; nameTag.setAttribute('aria-label', 'Name');
@@ -6504,6 +6570,8 @@ const World = (() => {
     nameTag.addEventListener('input', () => { d.name = nameTag.value.trim().slice(0, 14); nameTag.classList.remove('pulse'); });
     nameTag.addEventListener('change', () => { App.keep(c); if (d.name) { Sound.voice('happy'); c.say(0.4); c.setMood('happy', 1.2); if (c.standing) c.hop(0, 0.8); } });
     nameTag.addEventListener('keydown', (e) => { if (e.key === 'Enter') nameTag.blur(); });
+    // arranging has a screen of its own: the whole room above, its things and colours below. The yellow tick leaves it
+    arrDone = iconBtn('check', 'primary arrdone', root, 'Done arranging', () => { Sound.unlock(); leaveArranging(); });
     drawer = el('div', 'drawer', root);
     snackPanel = el('div', 'panel snacks', drawer);
     SNACK_LIST.forEach((s) => {
@@ -6558,23 +6626,38 @@ const World = (() => {
     wandBtn = iconBtn('wand', '', dock, 'Tricks', () => openDrawer('tricks'));
     palBtn = iconBtn('friends', '', dock, 'Friends', () => openDrawer('pals'));
     placeBtn = iconBtn('place', '', dock, 'Places', () => openDrawer('places'));
-    armBtn = iconBtn('armchair', 'room', dock, 'Arrange the room', () => { if (place === 'room') openDrawer('things'); else goRoom(true); });   // from anywhere: to the room, tray open
+    // her room, its painting the button (Brad, 2026-11-14: "Yes, her painting is the button"). A tap anywhere else takes her to her room;
+    // a tap in her room opens arranging. The dark ring says she is there
+    doorBtn = armBtn = el('button', 'door', dock); doorBtn.type = 'button'; doorBtn.setAttribute('aria-label', 'Its room');
+    doorBtn.addEventListener('click', () => { Sound.unlock(); if (place === 'room' && !host) { if (drawer.dataset.open !== 'things') openDrawer('things'); } else goRoom(); });
     showBtn = iconBtn('music', '', dock, 'Show time', toggleShow);
   }
 
   // the places drawer: each button is a small painting of where it goes
   function drawPlaces() {
     placePanel.replaceChildren();
+    const eight = el('div', 'eight', placePanel);   // the eight places, laid out the same whether or not friends' homes are below them
     PLACE_LIST.forEach((k) => {
-      const b = el('button', 'thumb scene' + (k === place ? ' on' : ''), placePanel); b.type = 'button'; b.setAttribute('aria-label', 'Place');
+      const b = el('button', 'thumb scene' + (k === place && !host ? ' on' : ''), eight); b.type = 'button'; b.setAttribute('aria-label', 'Place');
       const cv = Places.thumb(k, 58, theme); cv.style.width = '87px'; cv.style.height = '58px'; b.appendChild(cv);
-      b.addEventListener('click', () => { if (k !== place && !busy()) { setPlace(k); drawPlaces(); } });
+      b.addEventListener('click', () => { if (k !== place && !busy()) { host = null; setPlace(k); drawPlaces(); } });
     });
-    // the ninth: its own room, painted as she left it. It glows until it has been visited once on this device
-    let been = true; try { been = !!localStorage.getItem('doodlings.room.v1'); } catch (e) { /* ignore */ }
-    const b = el('button', 'thumb scene room' + (place === 'room' ? ' on' : '') + (been ? '' : ' glow'), placePanel); b.type = 'button'; b.setAttribute('aria-label', 'Room');
-    const cv = Room.thumb(d, 58); cv.style.width = '87px'; cv.style.height = '58px'; b.appendChild(cv);
-    b.addEventListener('click', () => { if (place !== 'room' && !busy()) { setPlace('room'); drawPlaces(); } });
+    // her room is not among them: the places are places to visit, her home is the painting in the dock (Brad, 2026-11-14). In her room none is chosen.
+    // After the eight, the home of each friend playing who lives on this device, with the friend's face on its corner (Brad, 2026-11-15: "Yes, that is it").
+    // A tap goes round; a tap on the home she is already in opens arranging, as her own painting does
+    const homes = homeFriends();
+    const row = homes.length ? el('div', 'homes', placePanel) : null;   // friends' homes: a row of their own beneath the places
+    homes.forEach((pd) => {
+      const here = place === 'room' && host === pd;
+      const b = el('button', 'thumb scene home' + (here ? ' on' : ''), row); b.type = 'button'; b.setAttribute('aria-label', 'A friend\'s home');
+      const cv = Room.thumb(pd, 58); cv.style.width = '87px'; cv.style.height = '58px'; b.appendChild(cv);
+      // the friend itself, head and eyes, peeking up over the painting's bottom right corner
+      const [, fg] = miniCanvas(48, b, 'peek');
+      const k = new Critter({ ...pd, parts: pd.parts.map((q) => ({ ...q })) }); k.alive = true; k.mood = 'happy'; k.moodT = 9;
+      let fs = 10; k.pose(24, 0, fs); fs *= 40 / Math.max(k.bounds.maxX - k.bounds.minX, (k.bounds.maxY - k.bounds.minY) * 0.75);
+      k.pose(24, 0, fs); k.pose(24 - ((k.bounds.minX + k.bounds.maxX) / 2 - k.x), 3 - (k.bounds.minY - k.y), fs); k.draw(fg);
+      b.addEventListener('click', () => { if (busy()) return; if (here) { openDrawer('places'); openDrawer('things'); } else { goFriend(pd); drawPlaces(); } });
+    });
   }
   // the friends drawer: every other doodling on the shelf, and anyone met on the trail
   const palChoices = () => friendChoices(d);
@@ -6625,6 +6708,8 @@ const World = (() => {
     snackPanel.classList.toggle('on', next === 'snacks'); trickPanel.classList.toggle('on', next === 'tricks');
     placePanel.classList.toggle('on', next === 'places'); palPanel.classList.toggle('on', next === 'pals'); tunePanel.classList.toggle('on', next === 'tunes');
     thingPanel.classList.toggle('on', next === 'things'); colPanel.classList.toggle('on', next === 'things'); armBtn.classList.toggle('on', next === 'things');
+    const arr = next === 'things';
+    if (arr !== root.classList.contains('arranging')) { root.classList.toggle('arranging', arr); if (!arr) release(); layout(); }
     if (next === 'things') { Room.drawThumbs(); Room.syncTray(); armBtn.classList.remove('glow'); try { localStorage.setItem('doodlings.roomtray.v1', '1'); } catch (e) { /* ignore */ } }
     else if (place === 'room') Room.deselect();
     if (next === 'tunes') drawTunes();
@@ -6653,7 +6738,9 @@ const World = (() => {
     env.left = 0; env.right = W; env.top = 0;
     env.floor = H < 560 ? H - 150 : H - (W <= 520 ? 292 : 240);   // the ground starts above the dock and its drawer
     baseS = clamp(Math.min(W, H * 0.8) * 0.17, 46, 150) * (place === 'room' ? ROOM.scale : 1);   // in its room a doodling is smaller, so the bed is a bed
-    roomG = place === 'room' ? Room.geo(W, H, env.floor, baseS, tagBottom()) : null;
+    placeName();
+    tagBottom();   // arranging lays the room out exactly as she plays in it: the same floor, wall and width
+    roomG = place === 'room' ? Room.geo(W, H, env.floor, baseS, wallTop()) : null;
     const f = Places.feel(place);
     env.g = baseS * 24 * (f.g || 1); env.lift = f.lift || 1; env.slip = f.slip === undefined ? 1 : f.slip; env.air = f.air || 0;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -6672,14 +6759,16 @@ const World = (() => {
   function setPlace(k) {
     const old = backdrop, was = place, oldS = baseS;
     if (was === 'room') { if (drawer.dataset.open === 'things') openDrawer('things'); Room.unbind(); }
-    place = d.place = k;
+    place = k; if (!host) d.place = k;   // at a friend's she is not anywhere new: her saved place stays where she came from
+    if (k === 'room') bindRoom();   // before the room is painted, so it is the right home's wall
     layout();
     // a change of size happens while the place wipes in, never in one frame
     if (baseS !== oldS) grow = { t: 0, from: oldS, to: baseS };
-    if (k === 'room') { bindRoom(); try { localStorage.setItem('doodlings.room.v1', '1'); } catch (e) { /* ignore */ } }
+    if (k === 'room' && !host) { try { localStorage.setItem('doodlings.room.v1', '1'); } catch (e) { /* ignore */ } }
     syncRoomBtn();
     wipe = { old, t: 0 };
     newToy();
+    if (host) { letIn(); ai.idle = 0; App.keepSoon(c); return; }
     Sound.sfx('magic'); Sound.sfx('whoosh', { gain: 0.4 });
     c.setMood('wide', 0.9); c.say(0.3); Sound.voice('question');
     if (c.asleep) napOver();
@@ -6692,30 +6781,98 @@ const World = (() => {
   // meant to pop it always reaches it (one once drifted under the painting). Hops, flings and the ball still go up behind the row for a moment, as always
   function ceiling() {
     let b = 0;
-    for (const e of [nameTag, doorBtn]) if (e && e.offsetHeight && e.offsetParent) b = Math.max(b, e.offsetTop + e.offsetHeight);
+    for (const e of [nameTag]) if (e && e.offsetHeight && e.offsetParent) b = Math.max(b, e.offsetTop + e.offsetHeight);
     return b ? b + 8 : 0;
   }
-  function tagBottom() { const tag = nameTag && nameTag.getBoundingClientRect(); return tag && tag.height ? tag.bottom - App.ui.getBoundingClientRect().top + 10 : 140; }
+  const arranging = () => !!root && root.classList.contains('arranging');
+  const side = () => App.H < 520 && App.W > App.H;
+  // where the room's wall starts: under the name's row
+  const wallTop = () => tagBottom();   // arranging too: where the wall starts when she plays, though the name is put away
+  function leaveArranging() { if (drawer.dataset.open === 'things') openDrawer('things'); Sound.sfx('tap'); }
+  // while she arranges, her doodling and its friends watch from the corner, peeking over the sheet (one tucked in bed stays there)
+  // Where the band between the floor and the sheet is deep (tablet, laptop), they are drawn a little smaller, so they peek as on a phone
+  // and never stand in front of the room: the tops of their heads stay below the floor line.
+  function watch() {
+    const sh = drawer.getBoundingClientRect(), u = App.ui.getBoundingClientRect(), rim = sh.top - u.top;
+    const fit = clamp((rim - env.floor - 8) / (baseS * 1.45), 0.45, 1);
+    const S = baseS * fit, ks = [c, ...pals.map((p) => p.c)];
+    ks.forEach((k, i) => {
+      if (k.grab || Room.tucked(k)) return;
+      if (!k.fx.giant && !k.fx.tiny) k.scT = fit;
+      const x = S * (1.25 + i * 1.55), face = k.facePos()[1] - k.y;
+      k.kin = { x, y: rim - k.S * 0.42 - face, a: 0 };   // peeking over the sheet's edge: the eyes always whole
+      k.lookAt = ptr ? { x: ptr.x, y: ptr.y } : { x: App.W * 0.6, y: env.floor - S * 2 };   // watching her hands
+    });
+  }
+  const watchEnv = () => (Room.tucked(c) ? env : { ...env, floor: 1e6 });
+  function release() { for (const k of [c, ...pals.map((p) => p.c)]) { if (!k.fx.giant && !k.fx.tiny) k.scT = 1; if (!Room.tucked(k)) k.kin = null; } }
+  // The name (Brad, 2026-11-14: "Yes, in the top row"): where the top row has a gap wide enough for the widest tag, the gift beside it
+  // and a margin each side, the tag sits in it, level with the buttons, as near the middle of the screen as the row allows. Where the row
+  // is full (an upright phone) it stays under the row, centred. Its place depends on the screen only, never on the name or a gift.
+  function placeName() {
+    if (!root || !nameTag) return;
+    const vis = (l) => [...root.querySelectorAll(`.topbar [aria-label="${l}"]`)].find((e) => e.offsetParent);
+    const gb = vis('Picture guide'), tb = vis('Adventure trail');
+    let top = '', left = '';
+    if (gb && tb) {
+      const u = App.ui.getBoundingClientRect(), g = gb.getBoundingClientRect(), t = tb.getBoundingClientRect(), TW = 190, GIFT = 56, M = 14;
+      if (t.left - g.right >= M + TW + GIFT + M) {
+        left = Math.round(clamp(App.W / 2, g.right - u.left + M + TW / 2, t.left - u.left - M - GIFT - TW / 2)) + 'px';
+        top = Math.round(g.top - u.top + g.height / 2 - 19) + 'px';
+      }
+    }
+    if (top + left === nameSpot) return;
+    nameSpot = top + left; nameTag.classList.toggle('inrow', !!top); nameTag.style.top = top; nameTag.style.left = left;
+    layout();   // the room's wall starts under it
+  }
+  // read from where the tag sits, not where it is drawn mid-animation; while it is put away (arranging), where it last sat
+  // the room's wall starts below the lowest of the name tag and the top row's buttons (the name may sit in the row)
+  function tagBottom() {
+    if (nameTag && nameTag.offsetParent && nameTag.offsetHeight) {
+      const top = root.querySelector('.topbar'), tb = top ? Math.max(...[...top.children].filter((e) => e.offsetHeight).map((e) => top.offsetTop + e.offsetTop + e.offsetHeight)) : 0;
+      lastTag = Math.max(nameTag.offsetTop + nameTag.offsetHeight, tb) + 10;
+    }
+    return lastTag;
+  }
   function bindRoom() {
-    Room.bind({ d, c, env, fx: fxp, arranging: () => drawer.dataset.open === 'things', keep: () => App.keepSoon(c), G: () => ({ ...roomG, wallTop: tagBottom() }),
+    Room.bind({ d: host || d, c, env, fx: fxp, arranging: () => drawer.dataset.open === 'things', keep: () => App.keepSoon(c), G: () => ({ ...roomG, wallTop: wallTop() }),
       // sideways the tray stands at the right: the room lays its things out to the left of it while it is open
-      reserve: () => (App.H < 520 && App.W > App.H ? thingPanel.getBoundingClientRect().width + 24 : 0),
+      reserve: () => 0,   // arranging no longer squeezes the room: it is the room she plays in
       repaint: () => layout() });
+    // (G above: wallTop follows the arranging screen too)
   }
-  // the armchair is in the dock for as long as the doodling is in its room, and glows until the tray has been opened once
-  // The way into the room from anywhere. In the room already, it answers with a little bounce and goes nowhere.
-  function goRoom(tray) {
+  // The way into the room from anywhere.
+  function goRoom() {
     if (busy()) { wiggle(doorBtn); return; }
-    if (place === 'room') { popIn(doorBtn); Sound.sfx('tap'); if (tray && drawer.dataset.open !== 'things') openDrawer('things'); return; }
     if (drawer.dataset.open) openDrawer(drawer.dataset.open);   // close whatever drawer is open
-    setPlace('room'); if (tray) openDrawer('things');
+    host = null; setPlace('room');
   }
-  // the armchair is always in the dock; the glow is on her room's painting until the room has been visited once on this device
+  // the friends playing who live on this device (not visitors by code, not ones met on the trail): their homes can be gone round to
+  const homeFriends = () => pals.map((p) => p.c.d).filter((pd) => !pd.guest && App.list.includes(pd));
+  // going round to a friend's home: the friend is already there, and lets her in
+  function goFriend(pd) {
+    if (busy()) return;
+    if (drawer.dataset.open) openDrawer(drawer.dataset.open);
+    if (!host) hostFrom = place;
+    host = pd; setPlace('room');
+  }
+  function letIn() {
+    const p = pals.find((q) => q.c.d === host); if (!p) return;
+    const k = p.c, S = baseS;
+    k.x = App.W * 0.66; k.y = env.floor - S; k.vx = k.vy = 0; k.kin = null; k.grab = null;   // at home already, by its door
+    c.x = Math.min(c.x, App.W * 0.3); c.vx = 0;
+    k.lookAt = { x: c.x, y: c.y }; c.lookAt = { x: k.x, y: k.y };
+    after(0.35, () => { if (!pals.includes(p)) return; palVoice(k, 'hello'); k.say(0.6); k.setMood('happy', 1.6); k.hop(-S * 0.6, 0.6); });
+    after(0.8, () => { c.setMood('happy', 1.4); Sound.voice('giggle'); c.say(0.3); c.hop(S * 0.8, 0.5); });
+    Sound.sfx('page');
+  }
+  // the friend whose home she is in has gone home: she goes back to where she came from
+  function hostLeft() { const from = hostFrom || 'meadow'; host = null; hostFrom = null; setPlace(from); drawPlaces(); }
+  // the glow is on her room's painting until the room has been visited once on this device
   function syncRoomBtn() {
     let been = true; try { been = !!localStorage.getItem('doodlings.room.v1'); } catch (e) { /* ignore */ }
     doorBtn.classList.toggle('glow', !been);
-    doorBtn.classList.toggle('here', place === 'room');
-    armBtn.classList.remove('glow');
+    doorBtn.classList.toggle('here', place === 'room' && !host);
     drawDoor();
   }
   // her room as it is now, redrawn when it changes
@@ -6810,7 +6967,7 @@ const World = (() => {
   }
   function togglePal(pd) {
     const i = pals.findIndex((p) => p.c.d.id === pd.id);
-    if (i >= 0) { const k = pals[i].c; fxp.burst('puff', k.x, k.y, 8, { speed: 200, size: k.S * 0.3, life: 0.5, color: '#fff', drag: 3 }); Sound.sfx('poof'); pals.splice(i, 1); }
+    if (i >= 0) { const k = pals[i].c; fxp.burst('puff', k.x, k.y, 8, { speed: 200, size: k.S * 0.3, life: 0.5, color: '#fff', drag: 3 }); Sound.sfx('poof'); pals.splice(i, 1); if (host && k.d === host) hostLeft(); }
     else if (pals.length >= 3) { wiggle(palPanel); Sound.sfx('error'); return; }
     else { addPal(pd); Sound.sfx('stick'); if (c.asleep && !(place === 'room' && Room.tucked(c))) napOver(); }   // a friend arriving wakes a nap, but not one tucked in bed
     d.pals = pals.map((p) => p.c.d.id);
@@ -6842,7 +6999,7 @@ const World = (() => {
         }
       }
       k.lookAt = k.grab ? null : held ? { x: held.x, y: held.y } : { x: c.x, y: c.y - c.S * 0.3 };
-      k.step(dt, env);
+      k.step(dt, arranging() ? watchEnv() : env);
     }
   }
 
@@ -6852,6 +7009,8 @@ const World = (() => {
     theme = worldTheme(d.color);
     place = Places.has(d.place) ? d.place : 'meadow';
     const oldS = c.S;
+    host = null; hostFrom = null;
+    Room.unbind(); if (place === 'room') bindRoom();   // her room is bound before the first paint, so its wall is her colour from the start
     layout();
     wipe = null; goal = 0; pals = [];
     items = []; timers = []; ptr = null; held = null; rocket = null;
@@ -7206,7 +7365,8 @@ const World = (() => {
     if (place === 'room' && Room.downFirst(p)) { ptr = { on: false, room: true, x: p.x, y: p.y, t0: time, moved: 0 }; return; }   // the marks of the thing being arranged
     if (c.asleep && !(place === 'room' && Room.tucked(c) && (!c.hit(p.x, p.y) || palAt(p)))) napOver();   // tucked in, it sleeps until it is touched itself
     const asleepInBed = place === 'room' && Room.tucked(c) && !!palAt(p);   // a friend over a sleeping doodling: the finger means the friend
-    if (!asleepInBed && !teach.perf && ai.busy !== 'eat' && ai.busy !== 'think' && c.hit(p.x, p.y)) {
+    const watcherC = arranging() && !Room.tucked(c);   // arranging, the watchers are not picked up: a finger on one reaches the room behind
+    if (!watcherC && !asleepInBed && !teach.perf && ai.busy !== 'eat' && ai.busy !== 'think' && c.hit(p.x, p.y)) {
       const [ux, uy] = c.toLocal(p.x, p.y);
       ptr = { on: true, x: p.x, y: p.y, t0: time, moved: 0, squeezed: false };
       c.grab = { ux, uy, tx: p.x, ty: p.y }; c.kin = null; rocket = null;
@@ -7214,7 +7374,7 @@ const World = (() => {
       if (teach.armed) startRec();
     } else {
       ptr = { on: false, x: p.x, y: p.y, t0: time, moved: 0 };
-      const pal = palAt(p);
+      const pal0 = palAt(p), pal = pal0 && !(arranging() && !Room.tucked(pal0.c)) ? pal0 : null;
       if (pal) { const [ux, uy] = pal.c.toLocal(p.x, p.y); ptr.pal = pal; pal.perf = null; pal.c.kin = null; pal.c.grab = { ux, uy, tx: p.x, ty: p.y }; }
       else if (toy && hypot(p.x - toy.x, p.y - toy.y) < toy.r + 24) { ptr.toy = true; toy.grab = true; Sound.sfx('pick'); }
       else if (place === 'room' && Room.down(p)) ptr.room = true;
@@ -7409,9 +7569,9 @@ const World = (() => {
       c.baseS = s; for (const p of pals) p.c.baseS = s * 0.9;
       if (grow.t >= 0.6) grow = null;
     }
-    think(dt);
+    if (arranging()) watch(); else think(dt);
     env.ceil = ceiling();
-    c.step(dt, env);
+    c.step(dt, arranging() ? watchEnv() : env);   // watching from the corner, it may stand lower than the floor, behind the sheet
     stepPals(dt);
     GrowHud.step(dt);
     for (const p of pals) p.tagT = Math.max(0, p.tagT - dt);
@@ -7493,7 +7653,7 @@ const World = (() => {
 
     g.save();
     if (shake > 0.2) g.translate(rand(-shake, shake), rand(-shake, shake));
-    c.drawShadow(g, env.floor);
+    if (!arranging() || Room.tucked(c)) c.drawShadow(g, env.floor);   // watching from behind the sheet, no shadow on the floor
     fxp.draw(g, true);
 
     // the ribbon a trick leaves behind
@@ -7509,7 +7669,7 @@ const World = (() => {
     }
     // in the room, those tucked in are drawn first with their blanket over them; whoever is awake is in front of the bed
     const inBed = (k) => place === 'room' && Room.tucked(k);
-    for (const p of pals) p.c.drawShadow(g, env.floor);
+    for (const p of pals) if (!arranging() || Room.tucked(p.c)) p.c.drawShadow(g, env.floor);
     if (place === 'room') { for (const p of pals) if (inBed(p.c)) p.c.draw(g); if (inBed(c)) c.draw(g); amb.blankets(g); }
     for (const p of pals) if (!inBed(p.c)) p.c.draw(g);
     for (const p of pals) if (p.tagT > 0) drawNameTag(g, p.c.d.name, p.c.x, p.c.bounds.minY - 16, 14, clamp01(p.tagT * 2));
@@ -7558,9 +7718,9 @@ const World = (() => {
     }
     if (flash > 0.01) { g.fillStyle = `rgba(255,252,235,${flash * flash})`; g.fillRect(0, 0, W, H); }
     const nt = nameTag.getBoundingClientRect(), root = App.ui.getBoundingClientRect();   // at home the gift waits beside the doodling's name
-    if (nt.width) { const bw = doorBtn.offsetWidth || 77, bh = doorBtn.offsetHeight || 54; doorBtn.style.left = Math.max(12, nt.left - root.left - 8 - bw) + 'px'; doorBtn.style.top = (nt.top - root.top + nt.height / 2 - bh / 2) + 'px'; }   // her room, on the other side
+    placeName();   // the top row may only be measurable once the screen shows
     if (place === 'room' || drawer.dataset.open === 'things') drawDoor();
-    GrowHud.draw(g, W, 122, phase === 'play' && !show.on ? c : null, nt.width ? { x: nt.right - root.left + 26, y: nt.top - root.top + nt.height / 2 } : null);
+    if (!arranging()) GrowHud.draw(g, W, 122, phase === 'play' && !show.on ? c : null, nt.width ? { x: nt.right - root.left + 26, y: nt.top - root.top + nt.height / 2 } : null);
   }
 
   function drawSnack(g, k, x, y, r, rot) {
@@ -7580,7 +7740,7 @@ const World = (() => {
   // read-only peek for the automated play-through (test/play.mjs)
   window.__doodLink = (budget) => Codec.encode(d, budget);
   window.__doodStay = (v) => { ai.stay = v; };              // the guide recorder: do not wander off after the ball mid-picture
-  window.__dood = () => (c ? { x: c.x, y: c.y, S: c.S, fx: Object.keys(c.fx), mood: c.currentMood(), phase, busy: ai.busy, tricks: d.tricks.length, name: d.name, levels: Grow.levels(d), grow: JSON.parse(JSON.stringify(Grow.of(d))), look: c.look, guests: pals.filter((p) => p.c.d.guest).length, place, voice: d.voice, tune: d.tune, band: Sound.music.playing ? Sound.music.theme : null, pals: pals.map((p) => ({ x: p.c.x, y: p.c.y })), toy: toy && { k: toy.k, x: toy.x, y: toy.y, r: toy.r }, net: amb && amb.net, asleep: c.asleep, room: place === 'room' ? Room.peek() : null, arranging: drawer && drawer.dataset.open === 'things', floor: env.floor, grounded: c.standing, vx: c.vx, vy: c.vy, b: { ...c.bounds }, mouth: c.mouthPos(), face: c.facePos() } : null);
+  window.__dood = () => (c ? { x: c.x, y: c.y, S: c.S, fx: Object.keys(c.fx), mood: c.currentMood(), phase, busy: ai.busy, tricks: d.tricks.length, name: d.name, levels: Grow.levels(d), grow: JSON.parse(JSON.stringify(Grow.of(d))), look: c.look, guests: pals.filter((p) => p.c.d.guest).length, place, voice: d.voice, tune: d.tune, band: Sound.music.playing ? Sound.music.theme : null, pals: pals.map((p) => ({ x: p.c.x, y: p.c.y })), toy: toy && { k: toy.k, x: toy.x, y: toy.y, r: toy.r }, net: amb && amb.net, asleep: c.asleep, room: place === 'room' ? Room.peek() : null, host: host ? host.id : null, arranging: drawer && drawer.dataset.open === 'things', floor: env.floor, grounded: c.standing, vx: c.vx, vy: c.vy, b: { ...c.bounds }, mouth: c.mouthPos(), face: c.facePos() } : null);
 
   return { enter, exit, step, draw, down, move, up, resize, _beat: onBeat, syncName: () => { if (nameTag && d) nameTag.value = d.name || ''; } };
 })();
@@ -7787,14 +7947,7 @@ const Card = (() => {
     k.drawShadow(g, floor);
     k.draw(g);
     g.restore();
-    if (Grow.shows(d, 'goldframe')) {                           // the gold frame from the prize counter
-      g.save(); g.lineJoin = 'round';
-      g.strokeStyle = inkOf('#FFC928'); g.lineWidth = 34; g.beginPath(); g.roundRect(px, py, pw, ph, 44); g.stroke();
-      g.strokeStyle = '#FFC928'; g.lineWidth = 24; g.stroke();
-      g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = 5; g.beginPath(); g.roundRect(px - 5, py - 5, pw + 10, ph + 10, 48); g.stroke();
-      for (const [x, y] of [[px, py], [px + pw, py], [px, py + ph], [px + pw, py + ph]]) { g.fillStyle = '#FFC928'; g.strokeStyle = inkOf('#FFC928'); g.lineWidth = 5; g.beginPath(); g.arc(x, y, 30, 0, TAU); g.fill(); g.stroke(); g.fillStyle = '#FF5A4E'; g.beginPath(); g.arc(x, y, 12, 0, TAU); g.fill(); }
-      g.restore();
-    }
+    if (Grow.shows(d, 'goldframe')) drawGoldFrame(g, px, py, pw, ph, 44);   // the gold frame from the prize counter
     // name, tricks, wordmark, QR
     const bottom = py + ph, hasQR = !!qr, textW = hasQR ? CW - 112 - 330 : CW - 112, tricks = d.tricks.slice(0, MAX_TRICKS), cups = Grow.of(d).cups.filter(Boolean).sort((a, b) => b - a);
     g.fillStyle = INK; g.textBaseline = 'alphabetic';
@@ -10125,6 +10278,7 @@ function friendChoices(d) {
 
 const Fair = (() => {
   let root, panel, prizeEls = {}, tryRow, buyBtn, offBtn, trying = null;   // trying: the prize it has on to see, not bought yet
+  let dress = { sel: -1, drag: null }, flagFly = null;   // flagFly: bought flags going from over her head to the awning   // the dressing room: which of the tried prize's parts wears the ring, and a move or a turn in progress
   let c = null, d = null, fxp = null, mode = 'hub', time = 0, bg = null, bgW = 0, bgH = 0, crowd = [], pals = [], going = null, ptr = null, idle = 0;
   const hub = { nodes: [], R: 60, floor: 0, S: 50 };
   const env = { g: 2000, floor: 0, left: 0, right: 0, top: -4000 };
@@ -10342,14 +10496,14 @@ const Fair = (() => {
     drawTicket(g, 19, 28, 11); g.fillStyle = INK; g.font = `800 20px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(p.cost), 40, 29);
     buyBtn.classList.toggle('dim', !can); buyBtn.classList.toggle('glow', can);
     const r = panel.getBoundingClientRect(), ur = App.ui.getBoundingClientRect();
-    if (App.H < 520) {                                       // sideways there is no room under the doodling: the buttons go beside it
-      tryRow.style.left = Math.round(c.x + hub.cS * 1.5) + 'px'; tryRow.style.right = 'auto'; tryRow.style.top = Math.round(c.y - 36) + 'px';
+    if (App.H < 520) {                                       // sideways there is no room under the doodling: the buttons go beside it (clear of the frame, when that is tried)
+      tryRow.style.right = 'auto'; tryRow.style.left = '0'; tryRow.style.left = Math.round(App.W - 16 - (tryRow.offsetWidth || 170)) + 'px'; tryRow.style.top = Math.round(c.y - 36) + 'px';   // at the edge, clear of where a prize can go
     } else { tryRow.style.left = '0'; tryRow.style.right = '0'; tryRow.style.top = Math.round(r.top - ur.top - 86) + 'px'; }
   }
   function endTry(sound) {
     if (!trying) return;
     const p = PRIZES.find((x) => x.k === trying);
-    trying = null;
+    trying = null; dress.sel = -1; dress.drag = null;
     if (p && p.part && c) wear(p.k, false);
     if (sound) { Sound.sfx('tap'); c.qv += 1.5; }
     if (d) PRIZES.forEach(drawPrizeThumb);
@@ -10361,6 +10515,7 @@ const Fair = (() => {
     endTry(false);
     trying = k;
     if (p.part) wear(k, true);
+    dress.sel = p.part ? d.parts.findIndex((x) => x.k === k) : -1; dress.drag = null;
     Sound.sfx('stick'); c.qv += 3; c.setMood('happy', 1.2); popIn(prizeEls[k]);
     PRIZES.forEach(drawPrizeThumb); showTry();
   }
@@ -10369,11 +10524,12 @@ const Fair = (() => {
     if (!p) return;
     idle = 0;
     if (Grow.of(d).tickets < p.cost) { wiggle(buyBtn); GrowHud.shake(); Sound.sfx('error'); c.setMood('think', 0.8); return; }
-    trying = null; showTry();
+    const placed = p.part ? d.parts.filter((x) => x.k === k).map((x) => ({ ...x })) : null;   // where she put it in the dressing room
+    trying = null; dress.sel = -1; dress.drag = null; showTry();
     if (p.part) wear(k, false);
-    tapPrize(k, true);
+    tapPrize(k, true, placed);
   }
-  function tapPrize(k, confirmed) {
+  function tapPrize(k, confirmed, placed) {
     const p = PRIZES.find((x) => x.k === k), b = prizeEls[k];
     idle = 0;
     if (!confirmed && !Grow.owns(d, k)) { tryOn(k); return; }
@@ -10381,7 +10537,8 @@ const Fair = (() => {
     const how = Grow.buy(d, k);
     if (how === 'short') { wiggle(b); GrowHud.shake(); Sound.sfx('error'); c.setMood('think', 0.8); return; }
     if (how === 'bought') {
-      if (p.part) wear(k, true);
+      if (k === 'bunting') flagFly = { t: 0 };
+      if (p.part) { if (placed && placed.length) { d.parts.push(...placed); c.swing.length = 0; c.refreshParts(); } else wear(k, true); }
       Sound.sfx('learn'); Sound.sfx('confetti'); popIn(b);
       fxp.burst('confetti', c.x, c.y - c.S, 40, { angle: -Math.PI / 2, spread: 1.2, speed: 700, size: 12, life: 2, colors: PALETTE.slice(0, 9), g: 900, drag: 1.4 });
       Sound.voice('tada'); c.say(0.6); c.setMood('proud', 2); c.qv += 4;
@@ -10392,6 +10549,83 @@ const Fair = (() => {
     PRIZES.forEach(drawPrizeThumb);
     App.keep(c);
   }
+  // ----- the dressing room: a prize being tried can be moved, sized and turned, like a part on the making screen -----
+  function partGeom(p) {
+    const def = PARTS[p.k], [ax, ay] = c.toWorld(p._u, p._v), px = c.S * def.size * (p.s || 1);
+    const tall = def.layer === 'back' || TALL_PARTS.includes(p.k), off = def.box ? -def.box[1] * px : tall ? 0.45 * px : 0, r = p.r || 0;
+    return { ax, ay, cx: ax + Math.sin(r) * off, cy: ay - Math.cos(r) * off, px, R: Math.max(30, px * 0.62) + 8 };
+  }
+  function dressDown(p) {
+    const P = PRIZES.find((x) => x.k === trying);
+    if (!P || !P.part || !c.m) return false;
+    const sp = d.parts[dress.sel];
+    if (sp && sp.k === trying) {                             // the handle: size and turn
+      const gm = partGeom(sp), kk = Math.SQRT1_2;
+      if (hypot(p.x - (gm.cx + gm.R * kk), p.y - (gm.cy - gm.R * kk)) < 26) { dress.drag = { type: 'handle', s0: sp.s || 1, r0: sp.r || 0, d0: hypot(p.x - gm.ax, p.y - gm.ay) || 1, a0: Math.atan2(p.y - gm.ay, p.x - gm.ax) }; return true; }
+    }
+    let hit = -1, best = 1e9;                                // the prize itself: move it (the doodling's own parts stay put)
+    d.parts.forEach((q, i) => { if (q.k !== trying) return; const gm = partGeom(q), dd = hypot(p.x - gm.cx, p.y - gm.cy); if (dd < Math.max(24, gm.px * 0.55) && dd < best) { best = dd; hit = i; } });
+    if (hit < 0) return false;
+    dress.sel = hit; const gm = partGeom(d.parts[hit]);
+    dress.drag = { type: 'part', ox: p.x - gm.ax, oy: p.y - gm.ay }; Sound.sfx('pick');
+    return true;
+  }
+  function dressMove(p) {
+    const sp = d.parts[dress.sel], dr = dress.drag;
+    if (!sp || sp.k !== trying) { dress.drag = null; return; }
+    const st = stage();
+    if (dr.type === 'part') {
+      const [ux0, uy0] = c.toUnit(sp.x, sp.y);
+      place(sp, p.x - dr.ox, p.y - dr.oy); orientFollow(sp, ux0, uy0); c.refreshParts();
+      fit(sp, st);
+    } else {
+      const gm = partGeom(sp);
+      sp.s = clamp((dr.s0 * hypot(p.x - gm.ax, p.y - gm.ay)) / dr.d0, 0.4, 3.2); sp.r = wrapAngle(dr.r0 + Math.atan2(p.y - gm.ay, p.x - gm.ax) - dr.a0);
+      c.refreshParts(); fit(sp, st);
+      for (let n = 0; n < 40 && !inStage(partGeom(sp), st) && sp.s > 0.4; n++) { sp.s = Math.max(0.4, sp.s * 0.96); c.refreshParts(); fit(sp, st); }   // no bigger than the room it has
+    }
+    c.refreshParts();
+  }
+  // put a part's anchor at a point on the screen
+  function place(sp, ax, ay) { const [sx, sy] = c.fromUnit(...c.toLocal(ax, ay)); sp.x = clamp(sx, -0.1, 1.1); sp.y = clamp(sy, -0.1, 1.1); c.refreshParts(); }
+  // the ring never leaves the dressing room: not under the tray, the buttons or the edge
+  function fit(sp, st) {
+    for (let n = 0; n < 6; n++) {
+      const gm = partGeom(sp), dx = clamp(gm.cx, st.l + gm.R, st.r - gm.R) - gm.cx, dy = clamp(gm.cy, st.t + gm.R, st.b - gm.R) - gm.cy;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+      place(sp, gm.ax + dx, gm.ay + dy);
+    }
+  }
+  // the dressing room: where a tried prize and its ring may go. Below the awning and the tickets; above the buttons and the tray
+  // (upright); left of the buttons (sideways, where they stand at the right edge)
+  function stage() {
+    const W = App.W, ur = App.ui.getBoundingClientRect(), pr = panel.getBoundingClientRect(), tr = tryRow.getBoundingClientRect();
+    const side = App.H < 520;
+    return { l: 8, r: side ? tr.left - ur.left - 12 : W - 8, t: 92, b: side ? pr.top - ur.top - 10 : tr.top - ur.top - 8 };
+  }
+  const inStage = (gm, st) => gm.cx - gm.R >= st.l - 0.5 && gm.cx + gm.R <= st.r + 0.5 && gm.cy - gm.R >= st.t - 0.5 && gm.cy + gm.R <= st.b + 0.5;
+  // a part that faces a way (a glove) turns as it is carried round her, as on the making screen
+  function orientFollow(p, ux0, uy0) {
+    if (!PARTS[p.k].orient) return;
+    const [ux, uy] = c.toUnit(p.x, p.y);
+    if (hypot(ux, uy) < 0.12 || hypot(ux0, uy0) < 0.12) return;
+    p.r = wrapAngle(p.r + wrapAngle(Math.atan2(ux, -uy) - Math.atan2(ux0, -uy0)));
+  }
+  // the flags, hung from a peg at each end, so the string reads as hung and not cut off
+  function hungBunting(g, x0, x1, y, sag, size, pegs) {
+    drawBunting(g, x0, x1, y, sag, size, time);
+    if (pegs <= 0) return;
+    g.save(); g.globalAlpha = pegs;
+    for (const x of [x0, x1]) { const r = Math.max(4, size * 0.28); g.fillStyle = '#C98A4B'; g.strokeStyle = INK; g.lineWidth = Math.max(1.5, size * 0.09); g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); g.stroke(); g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.arc(x - r * 0.3, y - r * 0.3, r * 0.35, 0, TAU); g.fill(); }
+    g.restore();
+  }
+  function knob(g, x, y) {                                   // the grow-and-turn handle, as on the making screen
+    g.fillStyle = 'rgba(43,45,66,0.18)'; g.beginPath(); g.arc(x, y + 2.5, 15, 0, TAU); g.fill();
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(x, y, 15, 0, TAU); g.fill();
+    g.strokeStyle = INK; g.lineWidth = 2.6; g.lineCap = 'round'; g.beginPath();
+    g.moveTo(x - 5, y + 5); g.lineTo(x + 5, y - 5); g.moveTo(x + 0.5, y - 5.5); g.lineTo(x + 5.5, y - 5.5); g.lineTo(x + 5.5, y - 0.5); g.moveTo(x - 0.5, y + 5.5); g.lineTo(x - 5.5, y + 5.5); g.lineTo(x - 5.5, y + 0.5);
+    g.stroke();
+  }
   function drawCounter(g) {
     const W = App.W, S = hub.cS;
     backdrop(g);
@@ -10400,12 +10634,31 @@ const Fair = (() => {
     const n = Math.ceil(W / 46), aw = W / n;
     for (let i = 0; i < n; i++) { g.fillStyle = i % 2 ? '#FF5A4E' : '#FFFDF8'; g.beginPath(); g.moveTo(i * aw, 0); g.lineTo((i + 1) * aw, 0); g.lineTo((i + 1) * aw, 60); g.arc((i + 0.5) * aw, 60, aw / 2, 0, Math.PI); g.closePath(); g.fill(); }
     g.fillStyle = 'rgba(43,45,66,0.08)'; g.fillRect(0, 60 + aw / 2, W, 6);
-    if (Grow.shows(d, 'bunting')) drawBunting(g, W * 0.08, W * 0.92, 60 + aw / 2 + 10, 22, clamp(W / 26, 14, 24), time);
+    const awn = [W * 0.08, W * 0.92, 60 + aw / 2 + 10, 22, clamp(W / 26, 14, 24)], over = [c.x - S * 2, c.x + S * 2, c.bounds.minY - S * 0.75, S * 0.4, clamp(S * 0.3, 12, 26)];
+    if (flagFly) { const u = ease.inOut(clamp01(flagFly.t / 0.8)); hungBunting(g, ...over.map((v, i) => lerp(v, awn[i], u)), 1 - u); }   // bought: from over her head up to the awning
+    else if (Grow.shows(d, 'bunting')) drawBunting(g, ...awn, time);
     const fy = c.bounds.maxY;
     g.fillStyle = '#FF8D84'; g.beginPath(); g.ellipse(c.x, hub.cy + S * 1.05, S * 1.7, S * 0.34, 0, 0, TAU); g.fill();
     g.strokeStyle = '#FFFDF8'; g.lineWidth = 4; g.beginPath(); g.ellipse(c.x, hub.cy + S * 1.05, S * 1.35, S * 0.25, 0, 0, TAU); g.stroke();
-    g.fillStyle = 'rgba(30,25,60,0.18)'; g.beginPath(); g.ellipse(c.x, fy, S * 0.8, S * 0.12, 0, 0, TAU); g.fill();
-    fxp.draw(g, true); c.draw(g); fxp.draw(g, false);
+    const framed = trying === 'goldframe';
+    if (framed) {                                            // trying the gold frame: she stands in her card's picture, in the frame
+      const pw = S * 4.1, ph = S * 4.5, px = c.x - pw / 2, py = hub.cy + S * 1.05 - ph + S * 0.6, k = pw / 968;
+      g.save(); g.beginPath(); g.roundRect(px, py, pw, ph, 44 * k); g.clip();
+      const gr = g.createLinearGradient(0, py, 0, py + ph); gr.addColorStop(0, '#CDEBFA'); gr.addColorStop(0.72, '#FFF4E2'); gr.addColorStop(0.72, '#BFE6A6'); gr.addColorStop(1, '#A7D98C');
+      g.fillStyle = gr; g.fillRect(px, py, pw, ph);
+      g.fillStyle = 'rgba(30,25,60,0.18)'; g.beginPath(); g.ellipse(c.x, fy, S * 0.8, S * 0.12, 0, 0, TAU); g.fill();
+      c.draw(g); g.restore();
+      drawGoldFrame(g, px, py, pw, ph, 44 * k, Math.max(0.12, k));
+    } else { g.fillStyle = 'rgba(30,25,60,0.18)'; g.beginPath(); g.ellipse(c.x, fy, S * 0.8, S * 0.12, 0, 0, TAU); g.fill(); }
+    fxp.draw(g, true); if (!framed) c.draw(g); fxp.draw(g, false);
+    if (trying === 'bunting') hungBunting(g, ...over, 1);   // trying the flags: strung over her, from two pegs
+    const sp = dress.sel >= 0 && d.parts[dress.sel] && d.parts[dress.sel].k === trying ? d.parts[dress.sel] : null;
+    if (sp && c.m) {                                         // the dressing room: the making screen's ring and handle on the prize being tried
+      const gm = partGeom(sp), kk = Math.SQRT1_2;
+      g.save(); g.strokeStyle = 'rgba(43,45,66,0.55)'; g.lineWidth = 2.5; g.setLineDash([7, 8]); g.lineDashOffset = -time * 14;
+      g.beginPath(); g.arc(gm.cx, gm.cy, gm.R, 0, TAU); g.stroke(); g.setLineDash([]);
+      knob(g, gm.cx + gm.R * kk, gm.cy - gm.R * kk); g.restore();
+    }
   }
 
   // ----- screen plumbing -----
@@ -10433,7 +10686,7 @@ const Fair = (() => {
     GrowHud.step(dt);
     const g0 = game();
     if (g0) { g0.step(dt); return; }
-    if (mode === 'counter') { c.kin = { x: App.W / 2, y: hub.cy - Math.abs(Math.sin(time * 2.6)) * hub.cS * 0.06, a: 0 }; c.step(dt, { ...env, floor: 1e6 }); return; }
+    if (mode === 'counter') { if (flagFly && (flagFly.t += dt) > 0.8) flagFly = null; c.kin = { x: App.W / 2, y: hub.cy - Math.abs(Math.sin(time * 2.6)) * hub.cS * 0.06, a: 0 }; c.step(dt, { ...env, floor: 1e6 }); return; }
     // the hub: everyone mills about; a tap on a medallion and the doodling hops over and goes in
     if (going) {
       going.t += dt;
@@ -10455,10 +10708,11 @@ const Fair = (() => {
     const calm = mode === 'hub' || mode === 'counter' || (mode === 'shoot' && ['ready', 'done'].includes(Shoot.peek().phase)) || (mode === 'cup' && Cup.peek().phase === 'podium');
     GrowHud.draw(g, App.W, 12, calm && !going ? c : null, null, mode === 'hub' || mode === 'counter');
   }
-  function down(p) { idle = 0; const g0 = game(); if (g0) { g0.down(p); return; } ptr = { x: p.x, y: p.y, moved: 0 }; }
-  function move(p) { const g0 = game(); if (g0) { g0.move(p); return; } if (ptr) { ptr.moved += Math.abs(p.x - ptr.x) + Math.abs(p.y - ptr.y); ptr.x = p.x; ptr.y = p.y; } for (const k of [c, ...pals]) if (mode === 'hub' && !going) k.lookAt = { x: p.x, y: p.y }; }
+  function down(p) { idle = 0; const g0 = game(); if (g0) { g0.down(p); return; } if (mode === 'counter' && dressDown(p)) { ptr = null; return; } ptr = { x: p.x, y: p.y, moved: 0 }; }
+  function move(p) { const g0 = game(); if (g0) { g0.move(p); return; } if (dress.drag) { dressMove(p); return; } if (ptr) { ptr.moved += Math.abs(p.x - ptr.x) + Math.abs(p.y - ptr.y); ptr.x = p.x; ptr.y = p.y; } for (const k of [c, ...pals]) if (mode === 'hub' && !going) k.lookAt = { x: p.x, y: p.y }; }
   function up(p) {
     const g0 = game(); if (g0) { g0.up(p); return; }
+    if (dress.drag) { dress.drag = null; Sound.sfx('drop'); return; }
     const t = ptr; ptr = null;
     if (!t || t.moved > 14 || going) return;
     const boop = (k) => { fxp.emit('ring', p.x, p.y, { size: 46, life: 0.35, color: 'rgba(255,255,255,0.9)' }); k.poke(p.x, p.y); Sound.setVoice({ size: k === c ? 0.5 : 0.42, seed: k.d.seed, style: k.d.voice }); Sound.voice('boop', { pitch: rand(0, 4) }); k.say(0.14); k.setMood('wide', 0.3); };
@@ -10475,7 +10729,7 @@ const Fair = (() => {
   }
 
   // read-only peek for the automated play-through and the lab
-  window.__fair = () => ({ mode, nodes: hub.nodes.map((n) => ({ k: n.k, x: n.x, y: n.y })), going: !!going, grow: d ? JSON.parse(JSON.stringify(Grow.of(d))) : null, levels: d ? Grow.levels(d) : null, best: d ? { ...d.best } : null, parts: d ? d.parts.map((p) => p.k) : [], shoot: mode === 'shoot' ? Shoot.peek() : null, cup: mode === 'cup' ? Cup.peek() : null, moment: Moment.isOpen, trying, c: c ? { x: c.x, y: c.y, fx: Object.keys(c.fx), S: c.S } : null, tickets: d ? Grow.of(d).tickets : 0, prizes: Object.fromEntries(Object.entries(prizeEls).map(([k, b]) => [k, b.className])) });
+  window.__fair = () => ({ mode, nodes: hub.nodes.map((n) => ({ k: n.k, x: n.x, y: n.y })), going: !!going, grow: d ? JSON.parse(JSON.stringify(Grow.of(d))) : null, levels: d ? Grow.levels(d) : null, best: d ? { ...d.best } : null, parts: d ? d.parts.map((p) => p.k) : [], shoot: mode === 'shoot' ? Shoot.peek() : null, cup: mode === 'cup' ? Cup.peek() : null, moment: Moment.isOpen, trying, c: c ? { x: c.x, y: c.y, fx: Object.keys(c.fx), S: c.S } : null, stage: mode === 'counter' && panel ? stage() : null, tryRect: tryRow ? (() => { const r = tryRow.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; })() : null, tried: trying && c && c.m ? d.parts.map((q, i) => ({ i, k: q.k, x: q.x, y: q.y, s: q.s, r: q.r, ...(q.k === trying ? partGeom(q) : {}) })).filter((q) => q.k === trying) : [], ringOn: dress.sel, tickets: d ? Grow.of(d).tickets : 0, prizes: Object.fromEntries(Object.entries(prizeEls).map(([k, b]) => [k, b.className])) });
 
   return { enter, exit, step, draw, down, move, up, resize, backdrop };
 })();
