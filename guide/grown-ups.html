@@ -53,7 +53,7 @@ footer{text-align:center;margin-top:20px}
 </main><script>(() => {
   const box = document.querySelector('[data-family]'); if (!box) return;
   const said = box.querySelector('.said'), say = (t) => { said.textContent = t; };
-  const STORES = ['doodlings.v1', 'doodlings.guests.v1', 'doodlings.trail.v1', 'doodlings.room.v1', 'doodlings.roomtray.v1', 'doodlings.fair.v1'];
+  const STORES = ['doodlings.v1', 'doodlings.guests.v1', 'doodlings.trail.v1', 'doodlings.room.v1', 'doodlings.roomtray.v1', 'doodlings.fair.v1', 'doodlings.finds.v1', 'doodlings.meadow.v1'];
   const HEAD = 'Doodlings family file, version ', VERSION = 1;
   let ls = null; try { ls = window.localStorage; ls.getItem('doodlings.v1'); } catch (e) { ls = null; }
   if (!ls) { box.classList.add('off'); say('Open this page from Doodlings to keep or bring back a family.'); return; }
@@ -91,6 +91,21 @@ footer{text-align:center;margin-top:20px}
       ls.setItem('doodlings.v1', JSON.stringify(shelf));
       ls.setItem('doodlings.guests.v1', JSON.stringify(gAll));
       if (fTrail || trail) ls.setItem('doodlings.trail.v1', JSON.stringify({ done: or(trail && trail.done, fTrail && fTrail.done), pond: or(trail && trail.pond, fTrail && fTrail.pond) }));
+      // her finds (Build 4): every way found on either side is kept, by need; a find's picture comes along if this device has none. The toy tidies the rest on load
+      const fFinds = parse('doodlings.finds.v1'), mine0 = read('doodlings.finds.v1') || {};
+      if (fFinds && typeof fFinds === 'object') {
+        const norm = (s) => ({ nothing: s && s.nothing && typeof s.nothing === 'object' ? s.nothing : {}, finds: s && s.finds && typeof s.finds === 'object' ? s.finds : (s && typeof s === 'object' ? Object.fromEntries(Object.entries(s).filter(([, v]) => Array.isArray(v))) : {}), met: s && Array.isArray(s.met) ? s.met : [] });
+        const a = norm(mine0), b = norm(fFinds);
+        for (const need of Object.keys(b.finds)) { if (!Array.isArray(b.finds[need])) continue; const mine = Array.isArray(a.finds[need]) ? a.finds[need] : (a.finds[need] = []); for (const f of b.finds[need]) { if (!f || typeof f.w !== 'string') continue; const had = mine.find((q) => q && q.w === f.w); if (!had) mine.push(f); else if (!had.pic && f.pic) had.pic = f.pic; } }
+        for (const k of b.met) if (typeof k === 'string' && !a.met.includes(k)) a.met.push(k);
+        a.when = Object.assign({}, (fFinds && fFinds.when) || {}, (mine0 && mine0.when) || {}); for (const k of Object.keys((fFinds && fFinds.when) || {})) if (mine0 && mine0.when && mine0.when[k]) a.when[k] = Math.max(mine0.when[k], fFinds.when[k]);
+        a.nothing = a.nothing || (mine0 && mine0.nothing) || {}; const bn = fFinds.nothing && typeof fFinds.nothing === 'object' ? fFinds.nothing : {};
+        for (const need of Object.keys(bn)) if (Array.isArray(bn[need])) a.nothing[need] = [...new Set([...(a.nothing[need] || []), ...bn[need].filter((w) => typeof w === 'string')])];
+        ls.setItem('doodlings.finds.v1', JSON.stringify(a));
+      }
+      // the meadow's days: a day won on either side stays won
+      const fMeadow = parse('doodlings.meadow.v1'), meadow = read('doodlings.meadow.v1');
+      if (fMeadow && typeof fMeadow === 'object') ls.setItem('doodlings.meadow.v1', JSON.stringify({ won: or(meadow && meadow.won, fMeadow.won), star: or(meadow && meadow.star, fMeadow.star), harder: !!(meadow ? meadow.harder : fMeadow.harder) }));
       for (const k of ['doodlings.room.v1', 'doodlings.roomtray.v1', 'doodlings.fair.v1']) if (st[k] && ls.getItem(k) === null) ls.setItem(k, st[k]);
     } catch (e) { say('This device is full, so the family could not be brought back. Nothing was changed.'); return; }
     say(added.length + (added.length === 1 ? ' doodling came back' : ' doodlings came back') + '. ' + already + (already === 1 ? ' was' : ' were') + ' already here.');

@@ -8721,7 +8721,7 @@ const KINDS = {
   cloud: { needs: ['rain'], shape: 'rain', w: 3.0 },
   log: { needs: ['through', 'over'], shape: 'tall', w: 2.8, h: 1.25 },
   wall: { needs: ['over'], shape: 'tall', w: 1.0, h: 2.5, art: true, springy: true, lamp: true },   // (Brief 14: springy, the jelly gets her over it as on the trail; lamp, a star lamp on top that opens it)
-  ice: { needs: ['melt', 'over'], shape: 'tall', w: 1.15, h: 2.5 },
+  ice: { needs: ['melt', 'over'], shape: 'tall', w: 1.15, h: 2.5, springy: true },   // (springy: the jelly's three bounces get her over it, as at the star wall; Brad, 2026-11-17, Game design W153: "The wall and the ice")
   barn: { needs: ['dark'], shape: 'dark', w: 3.4 },
   rock: { needs: ['heavy', 'over'], shape: 'tall', w: 2.0, h: 1.85 },
   fence: { needs: ['through', 'over'], shape: 'tall', w: 0.7, h: 1.6, spread: 0.9 },   // (spread: its drawing runs 0.9 past its posts each side, the rails and the outer pickets; Brief 14, the Fable thread's gate)
@@ -10923,7 +10923,7 @@ const DayOut = (() => {
     for (const o of course) {
       if (x > o.a && x < o.b) {
         const sh = kindOf(o).shape;
-        if (sh === 'tall') return (o.inside && (o.k === 'fence' || o.k === 'log')) || ((o.k === 'ice' || o.k === 'snowdrift') && o.melt > 0.5) || (o.k === 'rock' && o.moved > 0.5) || (o.k === 'greyflower' && (o.artK || 0) > 0.5) || (o.k === 'mousehouse' && o.through) || (o.k === 'hedge' && (o.burn || 0) > 0.6) || (o.k === 'mime' && ((o.artK || 0) >= 0.54 || o.open)) || (o.k === 'greypainting' && (o.artK || 0) >= 1) || (o.sink || 0) > 0.75 ? F : o.k === 'greypainting' && o.through ? F - S * 0.17 : o.top;   // (the flower lifted out of her way; inside the house, its floor; the mime's wall popped; in the painting's frame, its sill; tiny, through the fence or the log, the ground: Brad, 2026-11-17, she jumped over it instead of going under)
+        if (sh === 'tall') return ((o.inside || o.front) && (o.k === 'fence' || o.k === 'log')) || ((o.k === 'ice' || o.k === 'snowdrift') && o.melt > 0.5) || (o.k === 'rock' && o.moved > 0.5) || (o.k === 'greyflower' && (o.artK || 0) > 0.5) || (o.k === 'mousehouse' && o.through) || (o.k === 'hedge' && (o.burn || 0) > 0.6) || (o.k === 'mime' && ((o.artK || 0) >= 0.54 || o.open)) || (o.k === 'greypainting' && (o.artK || 0) >= 1) || (o.sink || 0) > 0.75 ? F : o.k === 'greypainting' && o.through ? F - S * 0.17 : o.top;   // (the flower lifted out of her way; inside the house, its floor; the mime's wall popped; in the painting's frame, its sill; tiny, through the fence or the log, the ground: Brad, 2026-11-17, she jumped over it instead of going under)
         if (sh === 'water') return o.frozen > 0.5 ? F : F + S * 0.18;
         return F;
       }
@@ -11368,7 +11368,7 @@ const DayOut = (() => {
       c.kin = null; c.vx = c.vy = 0; o.artK = 1; c.lookAt = null; return true;
     }
     if (o.k === 'lanterns') {                               // with any light she walks in, and each lantern lights as she passes beneath it
-      yield* prepare(o, part); if (o.party) { yield* danceThrough(o.b + S * 0.9); return true; } yield* walk(o.b + S * 0.9); o.artK = 1; return true;   // (at the party the lanterns flash and stay as they were)
+      yield* prepare(o, part); if (o.party) { yield* danceThrough(o.b + S * 0.9); return true; } yield* walk(past(o)); o.artK = 1; return true;   // (at the party the lanterns flash and stay as they were)
     }
     if (kindOf(o).bubbles && power === 'float') {          // bubble gum where a thing has bubbles of its own (Brief 14, drawing batch 11): she comes at her one height into their stream,
       // they gather into a cushion under her feet, carry her up and over, and let go as she comes down (the Fable thread, 2026-11-17)
@@ -11396,7 +11396,7 @@ const DayOut = (() => {
       o.inside = true; Sound.sfx('shrink', { gain: 0.3 });
       yield* glide(c, mid + S * 1.55, onGround(), 0.8, 0);
       o.inside = false; c.vx = c.vy = 0;
-      yield* walk(o.b + S * 0.9); return true;
+      yield* walk(past(o)); return true;
     }
     if (o.k === 'mousehouse' && power === 'tiny') {        // pea: she shrinks to the doors, in at the left, across the open room, out at the right (Brief 10)
       yield* walk(mid - S * 1.6);                           // (k follows where she is, in the step: houseK)
@@ -11406,7 +11406,7 @@ const DayOut = (() => {
       yield* glide(c, mid + S * 0.8, onGround(), 1.5, 0);
       yield* glide(c, mid + S * 1.55, onGround(), 0.6, 0);
       o.through = false; o.artK = 1; c.vx = c.vy = 0; c.scT = 0.5;
-      yield* walk(o.b + S * 0.9); return true;
+      yield* walk(past(o)); return true;
     }
     if (o.k === 'mousehouse' && (power === 'giant' || power === 'bouncy' || power === 'float')) {   // over the house, never onto it: daylight over the roof and the chimney (Brief 10)
       const clearUp = S * 1.95, room = (y) => Math.max(S * 0.4, Math.min(clearUp, c.bounds.minY - topRoom() - (c.y - y)));   // (never past the top of the screen)
@@ -11414,8 +11414,8 @@ const DayOut = (() => {
       if (power === 'giant') {                              // one big careful step, right over it
         yield* walk(o.a - S * 0.7); Sound.sfx('thud', { gain: 0.4 });
         yield* glide(c, o.b + S * 0.9, onGround(), 1.0, room(c.y)); Sound.sfx('thud', { gain: 0.5 }); c.qv += 3;
-      } else if (power === 'bouncy') {                      // jelly: one tall spring, high over the chimney (Brief 12)
-        yield* walk(o.a - S * 0.8); yield* jellyOver(o.b + S * 0.6, F - S * 1.95, o.a, o.b);
+      } else if (power === 'bouncy') {                      // jelly: over the chimney (Brief 12)
+        yield* threeBounces(o, F - S * 1.95);   // (three rising bounces, as everywhere: Game design W153)
       } else {                                              // gum: a balloon of herself, level over the chimney, down far beyond (Brief 12), at the one height it always has (Brief 14)
         yield* walk(o.a - S * 0.9); yield* gumOver(o.b + S * 2.1, F - S * (SHOULDER - 0.3), o.b);
       }
@@ -11433,7 +11433,7 @@ const DayOut = (() => {
         yield 0;
       }
       o.artK = 0.6; yield 0.15;
-      o.passing = c.x; yield* walk(o.b + S * 0.9); o.passing = 0; o.artK = 1; return true;
+      o.passing = c.x; yield* walk(past(o)); o.passing = 0; o.artK = 1; return true;
     }
     if (o.k === 'mime' && power === 'fire') {             // the pepper (Brief 12): the wall is only there while his hands hold it. Her heat warms it, his gloves go pink,
       // he snatches them off and blows on them; with both off the wall is gone, she walks by, and he bows her past still blowing on one
@@ -11450,7 +11450,7 @@ const DayOut = (() => {
       let h = 0.52; const warm = function* (dur) { for (let t = 0; t < dur; t += App.dt) { const was = h; h = Math.min(1, h + App.dt * 0.25); for (const [at, sfx] of marks) if (was < at && h >= at) Sound.sfx(sfx, { gain: 0.35 }); o.heat = h; yield 0; } };
       yield* warm(0.4);
       // he steps back out of her way as she comes, as the clown does, so she passes in front of him and not through him
-      const go = walk(o.b + S * 0.9); let r, tw = 0; do { r = go.next(); tw += App.dt; o.aside = clamp01(tw / 0.5); o.heat = h = Math.min(1, h + App.dt * 0.25); yield r.value; } while (!r.done);
+      const go = walk(past(o)); let r, tw = 0; do { r = go.next(); tw += App.dt; o.aside = clamp01(tw / 0.5); o.heat = h = Math.min(1, h + App.dt * 0.25); yield r.value; } while (!r.done);
       o.heat = 1; return true;
     }
     if (o.k === 'hedge' && power === 'fire') {            // the pepper (Brief 13): her breath catches the hedge from her side, it burns down to a low heap of ash, she walks by over it
@@ -11475,14 +11475,16 @@ const DayOut = (() => {
       const sz = (u) => lerp(0.22, 0.08, u), feet = () => c.bounds.maxY - c.y;
       yield* near(ox - S * 1.3 - (c.bounds.maxX - c.x));
       const [x0, y0] = at(0); Sound.sfx('boing', { gain: 0.3, pitch: 8 });
-      yield* glide(c, x0, y0 - feet(), 0.45, S * 0.4);
-      o.through = true; o.inPic = true; c.scT = c.sc = sz(0); Sound.sfx('drop', { gain: 0.4 });
+      o.through = true;                                   // (before the hop: the frame is not ground under her on her way in, or it lifts her onto its top for a moment, Brad 2026-11-17: "the quick little teleport to the top made it look like a glitch")
+      { const hx = c.x, hy = c.y, s0 = c.sc;                // the hop in, shrinking to the picture's size on the way, so she never pops smaller on landing
+        for (let t = 0; t < 0.5; t += App.dt) { const u = clamp01(t / 0.5), e = ease.inOut(u); c.scT = c.sc = lerp(s0, sz(0), e); c.kin = { x: lerp(hx, x0, e), y: lerp(hy, y0 - feet(), e) - Math.sin(u * Math.PI) * S * 0.45, a: 0 }; yield 0; } }
+      o.inPic = true; c.scT = c.sc = sz(0); Sound.sfx('drop', { gain: 0.4 });
       for (let t = 0; t < 2.6; t += App.dt) { const u = t / 2.6, [x, y] = at(u); o.walk = u; c.scT = c.sc = sz(u); c.kin = { x, y: y - feet(), a: Math.sin(t * 12) * 0.08 }; yield 0; }
       o.walk = 1; yield 0.35;
       o.inPic = false; o.walk = 0; o.through = false; c.kin = null;
       c.x = o.b + S * 0.7; c.y = restY(c, F); c.scT = 1; c.sc = 0.4; c.qv -= 6; c.vx = c.vy = 0;
       Sound.sfx('pop', { gain: 0.6 }); Sound.sfx('grow', { gain: 0.5 }); fxp().burst('puff', c.x, c.y, 6, { speed: 150, size: S * 0.2, life: 0.5, color: 'rgba(255,255,255,0.85)', drag: 3 });
-      yield 0.3; yield* walk(o.b + S * 0.9); return true;
+      yield 0.3; yield* walk(past(o)); return true;
     }
     if (o.k === 'greypainting' && power === 'rainbow') {  // the lollipop: colour jumps into the painting, its five pops, the door swings open and she walks through the frame (Brief 11)
       yield* near(mid - S * 1.25 - (c.bounds.maxX - c.x));
@@ -11509,7 +11511,7 @@ const DayOut = (() => {
       fxp().burst('confetti', c.x + S * 0.5, c.y, 16, { angle: -0.35, spread: 0.6, speed: S * 4, size: 9, life: 0.9, colors: ['#FF5A4E', '#FF9433', '#FFC928', '#9BD93A', '#35B6F2', '#8E5CF2'], drag: 2 });
       for (let t = 0; t < 1.4; t += App.dt) { o.artK = ease.inOut(t / 1.4); yield 0; }
       o.artK = 1; Sound.sfx('sparkle'); yield 0.15;
-      yield* walk(o.b + S * 0.9); return true;
+      yield* walk(past(o)); return true;
     }
     if (kindOf(o).lamp && power === 'glow') { yield* lampOpens(o); return true; }          // (Brief 14: facts a picture has, never its name)
     if (kindOf(o).springy && power === 'bouncy') { yield* threeBounces(o); return true; }
@@ -11536,14 +11538,33 @@ const DayOut = (() => {
   }
   // (Brief 14, part B) where the trail's jelly goes over (quest.js: the wall): two bounces, each higher, and the third carries her over,
   // clear of everything on top. The trail's own heights where they fit: 0.9 and 1.7, then over
-  function* threeBounces(o) {
+  function* threeBounces(o, over) {                      // over: the highest y she must clear, where the picture says (the mouse house's chimney)
     yield* near(o.a - S * 0.8 - (c.bounds.maxX - c.x));
     const y = restY(c, F), x0 = c.x, bo = c.bounds.maxY - c.y, head = c.y - c.bounds.minY;
     for (const h of [0.9, 1.7]) { Sound.sfx('boing', { pitch: h * 3 }); yield* jellyHop(x0, y, 0.4 + h * 0.06, S * h); }
-    const A = typeof TROUBLE_ART !== 'undefined' && TROUBLE_ART[o.k], top = F - S * (A && A.h ? Math.min(A.h, 3.45) : (F - o.top) / S);   // (the highest thing on it: the wall's lamp, at 3.44)
-    const x1 = Math.min(landCap(), o.b + S * 0.4 + (c.x - c.bounds.minX)), h = Math.min(y - topRoom() - head, (y + bo - top) + S * 0.25);
+    const A = typeof TROUBLE_ART !== 'undefined' && TROUBLE_ART[o.k], top = over !== undefined ? over : F - S * (A && A.h ? Math.min(A.h, 3.45) : (F - o.top) / S);   // (the highest thing on it: the wall's lamp, at 3.44)
+    const far = o.b + S * Math.max(0, kindOf(o).spread || 0);   // (the fence's rails run 0.9 past its posts: she lands beyond what she sees)
+    const x1 = Math.min(landCap(), far + S * 0.7 + (c.x - c.bounds.minX)), L = c.bounds.minX - c.x, R = c.bounds.maxX - c.x;
+    let need = (y + bo - top) + S * 0.3;                   // (the arc is lowest at the thing's near and far edges, not over its middle: measured where the middle half of her is over it; seen enlarged, at a fixed height her feet crossed the fence's pickets, and at the ice a foot crossed its corner: tools/see-clear.mjs measures it)
+    for (let i = 1; i < 48; i++) { const u = i / 48, x = lerp(x0, x1, u); if (x + R * 0.5 > o.a && x + L * 0.5 < far) need = Math.max(need, ((y + bo - top) + S * 0.3) / (4 * u * (1 - u))); }
+    // where her room is too low to clear it standing tall (a phone on its side: the wall and the ice), she tucks flat as jelly does and
+    // goes over on her tummy, her back just under the top of her room (the Fable thread, 2026-11-18: sideways she passed 10 px through their tops)
+    const room = y - topRoom() - head;
     Sound.sfx('boing', { pitch: 8 }); c.setMood('happy', 1.2); c.say(0.4);
-    yield* jellyHop(x1, y, 0.85, h);
+    if (need <= room) yield* jellyHop(x1, y, 0.85, need);
+    else {
+      // tuck: how flat she must go for her feet to pass over it with her back under the top of her room. Where even that is not enough
+      // (the star lamp on the wall stands higher than a sideways phone's room), it is the thing's own top she clears, o.top
+      const fit = (t) => clamp((t - S * 0.42 - topRoom() - 2) / (head + bo) - 1, -0.45, 0);   // (0.42: the ice's point and the wall's flowers stand a little over its top, seen enlarged)
+      let tuck = fit(top), aim = top; if (tuck <= -0.45 && o.top > top) { aim = o.top; tuck = fit(aim); }
+      const h = room - head * tuck - 2, C = y + bo * (1 + tuck) - aim + S * 0.3;
+      // and the arc flattens on top until it is high enough from the thing's near edge to its far one: 1 - |2u - 1|^p, p = 2 a plain bounce
+      let p = 2; for (; p < 7; p += 0.5) { let ok = true; for (let i = 1; i < 48; i++) { const u = i / 48, x = lerp(x0, x1, u); if (x + R * 0.5 > o.a && x + L * 0.5 < far && h * (1 - Math.pow(Math.abs(2 * u - 1), p)) < C) ok = false; } if (ok) break; }
+      c.qT = -0.3; for (let t = 0; t < 0.1; t += App.dt) yield 0;
+      c.qT = 0; c.qv += 9; const xs = c.x, ys = c.y;
+      for (let t = 0; t < 0.85; t += App.dt) { const u = clamp01(t / 0.85); c.qT = u > 0.08 && u < 0.88 ? tuck : 0; c.kin = { x: lerp(xs, x1, u), y: lerp(ys, y, u) - h * (1 - Math.pow(Math.abs(2 * u - 1), p)), a: 0 }; yield 0; }
+      c.qT = 0; c.kin = { x: x1, y, a: 0 }; c.qv -= 11; yield 0; c.kin = null;
+    }
     Sound.sfx('squish', { gain: 0.5 }); yield* jellyHop(Math.min(landCap(), x1 + S * 0.3), y, 0.26, S * 0.25); c.vx = c.vy = 0;
   }
   // (Brief 14, part E) a hop that reads as jelly: squashed before, stretched tall as she leaves, a real fall with weight, squashed wide
@@ -11607,10 +11628,20 @@ const DayOut = (() => {
       }
     } else if (need === 'through') {                       // tiny, through the log
       const rail = o.k === 'fence' ? S * 0.9 : 0;          // (the fence's rails run 0.9 past its posts: she goes in and comes out beyond them)
+      if (o.k === 'fence' && who === c) {                  // the fence: she trots along in front of it to the gap under the middle picket, ducks into it, and is through
+        const gx = (o.a + o.b) / 2;                         // (Brad, 2026-11-17: "the little character going through the fence gap though that appears made for them to go under")
+        yield* walk(o.a - rail - S * 0.4);
+        const s0 = c.scT, k0 = s0 / (c.sc || s0), fit = s0 * Math.min(1, S * 0.5 / ((c.bounds.maxY - c.bounds.minY) * k0), S * 0.7 / ((c.bounds.maxX - c.bounds.minX) * k0));   // (Brad, 2026-11-17: "Either the pea needs to shrink her more or the fence needs to be higher": she fits under the low rail, 0.6 high, between the pickets, like the mouse's door)
+        o.front = true; c.scT = fit; Sound.sfx('shrink', { gain: 0.4 }); yield* glide(c, gx, onGround(), 0.55, 0); o.front = false;
+        c.qv -= 4; o.inside = true; yield 0.3;
+        yield* glide(c, o.b + rail + S * 0.7, onGround(), 0.7, 0);
+        o.inside = false; c.scT = s0;
+      } else {
       yield* walk(o.a - rail - S * 0.4);
       o.inside = true; Sound.sfx('shrink', { gain: 0.4 });
       yield* glide(c, o.b + rail + S * 0.7, onGround(), 1.4 + rail / S * 0.6, 0);
       o.inside = false;
+      }
     } else if (need === 'heavy') {                         // too heavy: her giant doodling pushes it aside, or a giant thing knocks it away
       if (who === c) { yield* walk(o.a - S * 0.7); c.setMood('happy', 1); }
       else { yield* toJob(who, 'knocker'); yield* glide(who, o.a - S * 0.2, who.y, 0.25, 0); }
@@ -11618,7 +11649,7 @@ const DayOut = (() => {
       for (let t = 0; t < 1.0; t += App.dt) { o.moved = ease.inOut(clamp01(t / 1.0)); yield 0; }
       o.moved = 1; Sound.sfx('whoosh', { gain: 0.4 });
       if (who !== c) yield* glide(who, jobPose(who).x, jobPose(who).y, 0.4, S * 0.4);
-      yield* walk(o.b + S * 0.9);
+      yield* walk(past(o));
     } else if (need === 'melt') {                          // it melts to a puddle, and she walks over it
       if (who === c) {
         const want = o.k === 'ice' && (statueWant !== null ? statueWant : iceMelts > 0 && Math.random() < 1 / 3); if (o.k === 'ice') iceMelts++;   // one melt in three stops at a statue of her, never the first (Brief 13, D)
@@ -11632,8 +11663,8 @@ const DayOut = (() => {
         const st = o.statue, sx = (o.a + o.b) / 2;
         c.lookAt = { x: sx, y: F - st.h * 0.6 }; yield 0.6;
         c.setMood('happy', 1.1); Sound.voice('giggle'); c.say(0.5); c.qv += 2; yield 0.9;
-        c.lookAt = null; st.dripping = true; st.wait = 0.6; yield* walk(o.b + S * 0.9);
-      } else yield* walk(o.b + S * 0.9);
+        c.lookAt = null; st.dripping = true; st.wait = 0.6; yield* walk(past(o));
+      } else yield* walk(past(o));
     } else {                                               // over a tall thing
       const land = Math.min(o.a + S * 0.7, (o.a + o.b) / 2), leave = Math.max(o.b - S * 0.6, (o.a + o.b) / 2);
       if (who === c && power === 'float') {                // a balloon of herself: up, level over the top, and down far beyond (Brief 12)
@@ -11641,7 +11672,7 @@ const DayOut = (() => {
         yield* walk(o.a - S * 0.9); yield* gumOver(far + S * 2.1, F - S * (SHOULDER - 0.3), far); return;   // (always at the one height, her feet at her shoulder, whatever is under her: Brief 14)
       } else if (who === c && power === 'giant') {         // giant, she simply steps up
         yield* walk(o.a - S * 0.9); Sound.sfx('thud', { gain: 0.5 }); yield* glide(c, land, onTop(), 0.55, S * 0.4);
-      } else if (who === c) { yield* jellyOver(o.b + S * 0.6, o.top, o.a, o.k === 'fence' ? o.b + S * 0.9 : o.b); return; }   // jelly: one tall spring right over it (Brief 12)
+      } else if (who === c) { yield* threeBounces(o); return; }   // jelly: three rising bounces, wherever she goes over (Brad, 2026-11-17, Game design W153: "Three bounces everywhere"; was one tall spring, Brief 12)
       else if (power === 'bouncy') {
         yield* toJob(who, 'trampoline');
         yield* walk(o.a - S * 1.8);
@@ -11672,6 +11703,7 @@ const DayOut = (() => {
   // after-bounce. Further: the gum. She swells into a balloon of herself, lifts slowly, drifts across level with a bob, and keeps drifting,
   // sinking as the air goes out, to come down about one and a half further on. Looks only: no rule and no count reads them
   // where a landing may reach: never past her waiting place at the next trouble, so she never walks back left to it (Fable, 2026-11-17)
+  const past = (o) => Math.min(landCap() - S * 1.0, o.b + S * 0.9);   // where a walk past a trouble aims: never past her next waiting place, since her last hop carries her up to a unit further (X11: after a day's last trouble she overshot her place by the flag and stepped back)
   const landCap = () => (course[cur + 1] ? course[cur + 1].wait : flagX - S * 0.9);   // (after the last trouble: her place by the flag)
   function* jellyOver(x1, top, a, b) {                     // top: the highest y she must pass over; a, b: the thing's two sides
     const x0 = c.x, y0 = c.y, bo = c.bounds.maxY - c.y, y1 = F - bo, room = c.bounds.minY - topRoom();
@@ -12811,6 +12843,20 @@ const DayOut = (() => {
     g.translate(at[0], at[1]); M.draw(g, oo);
     g.restore();
   }
+  const isDarkHere = (o) => o.k === 'hollow' || o.k === 'barn' || o.layer === 'hollow' || o.layer === 'barn';
+  // her in a dark doorway: one even shade over the whole of her, as dark as the doorway's, by how much of her is inside it
+  function shadeHer(g, o) {
+    const a = 0.9 * (1 - o.lit * 0.92); if (a < 0.02) return;
+    const b = c.bounds, d0 = o.la + S * 0.15, d1 = o.lb - S * 0.15;
+    const inside = clamp01((Math.min(b.maxX, d1) - Math.max(b.minX, d0)) / Math.max(1, b.maxX - b.minX)); if (inside <= 0) return;
+    const m = g.getTransform(), k = Math.hypot(m.a, m.b) || 1, pad = 4, x0 = b.minX - pad, y0 = b.minY - pad, w = b.maxX - b.minX + pad * 2, h = b.maxY - b.minY + pad * 2;
+    const q = shadeHer.q || (shadeHer.q = document.createElement('canvas').getContext('2d')), cw = Math.ceil(w * k), ch = Math.ceil(h * k);
+    if (q.canvas.width < cw) q.canvas.width = cw; if (q.canvas.height < ch) q.canvas.height = ch;
+    q.setTransform(1, 0, 0, 1, 0, 0); q.globalCompositeOperation = 'source-over'; q.clearRect(0, 0, q.canvas.width, q.canvas.height);
+    q.setTransform(k, 0, 0, k, -x0 * k, -y0 * k); c.draw(q);
+    q.setTransform(1, 0, 0, 1, 0, 0); q.globalCompositeOperation = 'source-atop'; q.fillStyle = `rgba(22,18,52,${a * inside})`; q.fillRect(0, 0, cw, ch); q.globalCompositeOperation = 'source-over';
+    g.drawImage(q.canvas, 0, 0, cw, ch, x0, y0, w, h);
+  }
   function drawDarkFront(g, o) {
     const a = 0.9 * (1 - o.lit * 0.92);
     if (a < 0.02) return;
@@ -12908,7 +12954,7 @@ const DayOut = (() => {
     if (o.k === 'pond') drawPond(g, o);
     if (o.k === 'log' && (o.inside || o.rolling || pic)) { if (!pic) drawLog(g, o); }
     if (o.k === 'fence' && o.inside && !pic) drawFence(g, o);   // tiny, under the rail: the pickets go in front of her as she passes
-    if (o.k === 'hollow' || o.k === 'barn' || o.layer === 'hollow' || o.layer === 'barn') { drawDarkFront(g, o); drawParty(g, o); }
+    if (isDarkHere(o)) drawParty(g, o);
     if (o.k === 'mime' && (o.mirror > 0.01 || o.dent > 0.01)) drawWallSeen(g, o);
   }
   // the painting's glass, seen for a moment (Brief 11 ruling): her fog with a smile drawn in it, as at the mime, or a round shine of her light
@@ -13205,7 +13251,9 @@ const DayOut = (() => {
     // nothing of the water is drawn over a pad (the stream and the pond are drawn in front of her already)
     const wade = course.find((o) => o.wade && o.k === 'lilypads');
     if (wade) { const w = waterOf(wade), cut = new Path2D(); cut.rect(cam - W, -H, W * 3, H * 3); cut.rect(w.x0, w.top, w.x1 - w.x0, H * 2); g.save(); g.clip(cut, 'evenodd'); }
+    for (const o of course) if (isDarkHere(o)) drawDarkFront(g, o);   // (the dark of a doorway behind her, and on her one even shade by how far in she is: it cut a line down her at the door's edge, Brad 2026-11-17)
     if (!pic || (pic.walk || 0) < A.behindTreeAt) c.draw(g);
+    if (!pic) for (const o of course) if (isDarkHere(o)) shadeHer(g, o);
     if (wade) g.restore();
     if (pic) g.restore();
     if (wall) g.restore();
