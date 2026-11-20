@@ -98,6 +98,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--paper)
 .thumb.slot.empty::after { content: ""; width: 14px; height: 14px; border-radius: 50%; background: rgba(43,45,66,.16); grid-area: 1 / 1; place-self: center; }
 .waking .dock, .waking .drawer, .waking .topbar { transform: translate(-50%, 160%); opacity: 0; pointer-events: none; }
 .waking .topbar { transform: translateY(-160%); }
+/* the pad over a sleeping doodling: nothing to see, and a finger goes straight through to her; a key user sees a ring round her */
+#ui .wakepad { position: absolute; padding: 0; border: 0; border-radius: 50%; background: none; pointer-events: none; }
+.wakepad:focus { outline: none; }
+#ui .wakepad:focus-visible { box-shadow: 0 0 0 4px rgba(53,182,242,.6); }   /* the same blue ring as every button a key reaches */
 
 /* ----- home ----- */
 .home .huge { position: absolute; left: 50%; bottom: calc(7vh + var(--sab)); margin-left: -46px; }
@@ -785,6 +789,45 @@ const Sound = (() => {
       if (kind === 'brr') for(let j=1;j<7;j++) tone(t+j*.07,.055,hz(base+rand(-1,1)),hz(base),.075,'sine',1400,opts);
     });
   }
+  // A pet's call: one small voice whose pitch moves through three points. It is the pet's own tone, not her doodling's.
+  function call(t, duration, f, amp, v, opts = {}) {
+    if (active >= 96) return;
+    const out = route(opts), env = ctx.createGain(), filter = ctx.createBiquadFilter(), blend = ctx.createGain();
+    const a = ctx.createOscillator(), b = ctx.createOscillator(), turn = t + duration * (v.turn || .4);
+    filter.type = 'bandpass'; filter.frequency.value = v.color; filter.Q.value = v.q || .7; blend.gain.value = v.round ?? .45;
+    a.type = v.wave; b.type = 'sine';
+    for (const o of [a, b]) { o.frequency.setValueAtTime(Math.max(15, f[0]), t); o.frequency.exponentialRampToValueAtTime(Math.max(15, f[1]), turn); o.frequency.exponentialRampToValueAtTime(Math.max(15, f[2]), t + duration); }
+    env.gain.setValueAtTime(0, t); env.gain.linearRampToValueAtTime(amp, t + Math.min(.014, duration / 5)); env.gain.linearRampToValueAtTime(amp * .7, t + duration * .55);
+    env.gain.exponentialRampToValueAtTime(.00001, t + duration); env.gain.setValueAtTime(0, t + duration + .004);
+    a.connect(filter); filter.connect(env); b.connect(blend); blend.connect(env); env.connect(out.input);
+    const nodes = [a, b, filter, blend, env, ...out.nodes], running = [a, b];
+    if (v.depth) { const lfo = ctx.createOscillator(), depth = ctx.createGain(); lfo.frequency.value = v.rate || 6; depth.gain.value = v.depth; lfo.connect(depth); depth.connect(a.detune); depth.connect(b.detune); nodes.push(lfo, depth); running.push(lfo); }
+    active++; a.onended = () => { active = Math.max(0, active - 1); nodes.forEach(n => { try { n.disconnect(); } catch (_) {} }); };
+    running.forEach(n => { n.start(t); n.stop(t + duration + .02); });
+  }
+  // Each pet speaks in its own voice: how high (a note), how it is made, and what it says when it is stroked (happy), comes out (hello) and knocks the ball (play).
+  // A word is a list of calls: [when, how long, three steps of pitch above its note, how loud]. 'puff' in place of the steps is a breath.
+  // Brad chose each by ear on 2026-11-20, from three: the kitten's mew, the puppy's round woof, the bird's whistle that warbles, the hedgehog's snuffles and squeak.
+  const PET_VOICES = {
+    kitten: { note: 84, wave: 'triangle', color: 1700, q: .8, rate: 6, depth: 18,
+      happy: [[0, .26, [-5, 2, 3], 1, { rate: 26, depth: 60 }]], hello: [[0, .34, [-3, 4, -1]]], play: [[0, .14, [2, 7, 4]]] },
+    puppy: { note: 62, wave: 'triangle', color: 800, q: .8,
+      happy: [[0, .13, [0, 3, -5]], [.19, .16, [1, 5, -5]]], hello: [[0, .04, 'puff', .6], [0, .2, [2, 4, -7], 1.15]], play: [[0, .12, [3, 6, -3]]] },
+    bird: { note: 91, wave: 'sine', color: 2800, q: .5, round: .3, rate: 6, depth: 14,
+      happy: [[0, .3, [0, 7, 5], 1, { rate: 14, depth: 90 }]], hello: [[0, .2, [7, 7, 7]], [.24, .26, [3, 3, 2]]], play: [[0, .12, [5, 9, 9]]] },
+    hedgehog: { note: 79, wave: 'triangle', color: 1900, q: .7,
+      happy: [[0, .05, 'puff'], [.09, .05, 'puff'], [.18, .05, 'puff'], [.3, .1, [7, 12, 10]]], hello: [[0, .05, 'puff'], [.06, .09, [5, 10, 8]], [.19, .12, [7, 12, 9]]], play: [[0, .05, 'puff'], [.02, .08, [7, 13, 12]]] },
+  };
+  function pet(kind, word, opts = {}) {
+    if (!ready() || !Object.prototype.hasOwnProperty.call(PET_VOICES, kind) || active > 48) return;
+    const v = PET_VOICES[kind];
+    if (!Array.isArray(v[word])) return;
+    const t = ctx.currentTime + .003 + clamp(opts.delay, 0, 2, 0), base = v.note + rand(-.3, .3);
+    v[word].forEach(([delay, duration, steps, loud = 1, own]) => {
+      if (steps === 'puff') noise(t + delay, duration, .11 * loud, 1100, opts);
+      else call(t + delay, duration, steps.map(n => hz(base + n)), .2 * loud, own ? { ...v, ...own } : v, opts);
+    });
+  }
   const sfxNames = 'tap pick drop swipe undo delete error camera page clay brush stick dice squish boing thud whoosh hop sparkle magic poof fire freeze crack shatter inflate deflate grow shrink rainbow star night recStart recStop learn confetti horn ping'.split(' ');
   function sfx(name, opts = {}) {
     if (!ready() || !sfxNames.includes(name) || active > 64 || (name === 'brush' && active > 24)) return;
@@ -966,7 +1009,7 @@ const Sound = (() => {
     // iPhone Safari treats Web Audio as ambient and goes quiet in Silent mode unless the page says it is media.
     unlock:safe(()=>{ try{if(typeof navigator!=='undefined'&&navigator.audioSession)navigator.audioSession.type='playback';}catch(_){} if(!ctx) {const C=typeof AudioContext!=='undefined'?AudioContext:typeof webkitAudioContext!=='undefined'?webkitAudioContext:null;if(!C)return;setup(new C());} unlocked=true; if(ctx.state==='suspended'||ctx.state==='interrupted') {const p=ctx.resume();if(p&&p.catch)p.catch(()=>{});} }),
     get muted(){return muted;}, setMuted:safe(v=>{muted=!!v;if(master)ramp(master.gain,muted?0:.9,ctx.currentTime,.02);}),
-    setVoice:safe(setVoice), voice:safe(voice), sing:safe(sing), sfx:safe(sfx), charge:safe(charge), wake:safe(wake), music,
+    setVoice:safe(setVoice), voice:safe(voice), pet:safe(pet), sing:safe(sing), sfx:safe(sfx), charge:safe(charge), wake:safe(wake), music,
     get key(){return key;}, _test:safe(c=>{stopMusic();stopCharge();setup(c);noiseBuffer=null;hidden=false;return api;})
   };
   if(typeof document!=='undefined') document.addEventListener('visibilitychange',safe(()=>{hidden=document.hidden;if(!ctx)return;if(hidden){stopMusic();stopCharge();if(ctx.suspend){const p=ctx.suspend();if(p&&p.catch)p.catch(()=>{});}}else if(unlocked&&ctx.resume){const p=ctx.resume();if(p&&p.catch)p.catch(()=>{});}}));
@@ -6573,13 +6616,15 @@ const Room = (() => {
     return false;
   }
   // A doodling let go over a bed is tucked in and goes to sleep. Returns true if it was.
-  function dropped(k) {
+  // Over a bed: where the doodling is, or else where the finger let it go (`at`). Held, it trails the finger,
+  // so a quick hand is over the bed before the doodling is, and letting go there is still letting go over the bed.
+  function dropped(k, at) {
     if (!ctx || ctx.arranging()) return false;
     const G1 = G();
-    for (const o of of(ctx.d).things) {
+    for (const p of at ? [k, at] : [k]) for (const o of of(ctx.d).things) {
       if (o.k !== 'bed') continue;
       const b = box(o, G1), T = ROOM_THINGS.bed;
-      if (Math.abs(k.x - b.ax) < b.hw * 0.95 && k.y < b.ay + b.u * 0.2 && k.y > b.ay + T.top * b.u - b.u * 3) {
+      if (Math.abs(p.x - b.ax) < b.hw * 0.95 && p.y < b.ay + b.u * 0.2 && p.y > b.ay + T.top * b.u - b.u * 3) {
         const used = sleepers.filter((s) => s.o === o).map((s) => s.slot), slot = [0, 1].find((n) => !used.includes(n));
         if (slot === undefined) return false;
         const sl = { k, o, slot }; sleepers.push(sl);
@@ -7617,19 +7662,18 @@ const Bus = (() => {
   return { width, height, scaleFor, widthFit, bounds, draw, rider, place, seat, windowPassenger, doorPose, dimensions, passenger, visualPose, land, shadow, roof, ticket };
 })();
 
-// ===== pet.js =====
-// The kitten is drawn in units of one pixel on its drawing board, feet at y=0.
-const Pet = (() => {
-  const calico = Object.freeze({
-    coat: '#F4CF9D', patchA: '#EA8B48', patchB: '#584450', bib: '#FFF9EA',
-    ear: '#EFA69F', tip: '#584450', eyes: '#83B858', pattern: 'patches',
-  });
-  const patterns = ['plain', 'patches', 'stripes', 'spots'];
+// ===== pets/_art.js =====
+// What every kind of pet is drawn with. A pet is drawn in units of one pixel on its drawing board,
+// feet at y=0, facing right. Each kind adds itself to PetArt.kinds (one file each, beside this one).
+const PetArt = (() => {
   const outline = '#392F3C';
   const paths = new Map();
   function path(d) {
     if (typeof d !== 'string') return d;
-    if (!paths.has(d)) paths.set(d, new Path2D(d));
+    if (!paths.has(d)) {
+      if (paths.size > 600) paths.clear();                  // a mouth or a brow on the move is a new string each frame: do not keep them all
+      paths.set(d, new Path2D(d));
+    }
     return paths.get(d);
   }
   function shape(g, d, fill, stroke = outline) {
@@ -7637,23 +7681,16 @@ const Pet = (() => {
     if (fill) { g.fillStyle = fill; g.fill(p); }
     if (stroke) { g.strokeStyle = stroke; g.stroke(p); }
   }
-  function oval(g, x, y, rx, ry, fill, stroke = null) {
-    g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, TAU);
-    g.fillStyle = fill; g.fill();
+  function oval(g, x, y, rx, ry, fill, stroke = null, rot = 0) {
+    g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, TAU);
+    if (fill) { g.fillStyle = fill; g.fill(); }
     if (stroke) { g.strokeStyle = stroke; g.stroke(); }
   }
-
-  const back = 'M-36 -3 Q-47 -10 -44 -26 Q-41 -42 -22 -43 C-11 -44 0 -39 9 -38 Q29 -38 35 -20 Q40 -8 27 -4 Q13 0 -36 -3Z';
-  const head = 'M-22 -45 Q-28 -59 -25 -72 Q-24 -77 -19 -74 Q-10 -69 -5 -61 Q5 -63 15 -60 Q22 -70 30 -71 Q35 -72 34 -64 L33 -49 Q42 -42 40 -33 Q37 -20 17 -18 Q-3 -16 -17 -25 Q-29 -33 -22 -45Z';
-  const tail = 'M-31 -12 C-52 -5 -65 -14 -66 -29 Q-68 -43 -58 -49 Q-52 -52 -48 -48 Q-44 -44 -49 -39 C-58 -27 -49 -20 -34 -26 Q-25 -27 -25 -19 Q-25 -14 -31 -12Z';
-  const bib = 'M7 -32 Q19 -37 28 -27 Q34 -22 30 -14 Q26 -6 15 -6 Q12 -1 5 0 L-2 0 Q-10 -2 -6 -10 Q-3 -16 0 -23 Q2 -29 7 -32Z';
-  const paw = 'M-8 0 Q-11 -2 -9 -7 Q-6 -12 2 -11 Q10 -10 10 -4 Q10 0 5 0Z';
-  const rear = 'M-33 -3 Q-38 -11 -32 -21 Q-26 -29 -17 -25 Q-8 -21 -10 -12 Q-6 -10 -7 -5 Q-8 0 -15 0 L-28 0 Q-33 0 -33 -3Z';
-  const muzzle = 'M-8 -32 Q-4 -40 6 -37 Q13 -41 21 -38 Q30 -38 34 -32 Q34 -22 19 -21 Q8 -19 -2 -23 Q-10 -26 -8 -32Z';
-
+  // a mark over a colour: darker on a light one, lighter on a dark one
+  const tintOf = (color, amt = 1) => shade(color, (hexToHsl(color)[2] < .46 ? .39 : -.29) * amt);
   function texture(g, clip, color, pattern, x, y, w, h) {
     if (!pattern || pattern === 'plain') return;
-    const tint = shade(color, hexToHsl(color)[2] < .46 ? .39 : -.29);
+    const tint = tintOf(color);
     const unit = Math.max(1, Math.min(w, h) / 6);
     g.save(); g.clip(clip);
     if (pattern === 'patches') {
@@ -7672,6 +7709,695 @@ const Pet = (() => {
     }
     g.restore();
   }
+  // a line drawn on a colour (toes, a mouth): the outline, or a pale line when the colour is nearly as dark
+  function detail(color) { return hexToHsl(color)[2] < .28 ? mix(color, '#E0BBC0', .45) : outline; }
+  // fill, then whatever is drawn inside it, then its outline on top
+  function within(g, d, fill, inside, stroke = outline) {
+    shape(g, d, fill, null);
+    if (inside) { g.save(); g.clip(path(d)); inside(); g.restore(); }
+    if (stroke) shape(g, d, null, stroke);
+  }
+  // the soft shade along the bottom of a body and the small shine on top of it, as the kitten has
+  function shadeLow(g, d, y0, y1) {
+    g.save(); g.clip(path(d));
+    g.fillStyle = rgba(outline, .13); g.fillRect(-200, y0, 400, y1 - y0);
+    g.restore();
+  }
+  // One eye. kind: 'round' (a white eye, an iris and a round pupil), 'slit', or 'bead' (a dark shining bead).
+  // blink 0..1 closes it; happy 0..1 closes it into a smiling arch; wide opens it further.
+  function eye(g, ex, ey, r, o = {}) {
+    const { blink = 0, happy = 0, wide = 0, look = 0, gaze = 0, iris = '#7A4B2A', kind = 'round', line = outline, light = 0 } = o;
+    g.save(); g.lineWidth = Math.max(1.6, r * .42); g.lineCap = 'round';
+    if (happy > .5) {
+      g.strokeStyle = line; g.beginPath(); g.moveTo(ex - r, ey + r * .25); g.quadraticCurveTo(ex, ey - r * 1.05, ex + r, ey + r * .25); g.stroke();
+      g.restore(); return;
+    }
+    if (blink > .82) {
+      g.strokeStyle = line; g.beginPath(); g.moveTo(ex - r, ey); g.quadraticCurveTo(ex, ey + r * .5, ex + r, ey); g.stroke();
+      g.restore(); return;
+    }
+    const open = 1 - blink * .77 + wide * .2;
+    if (kind === 'bead') {
+      const rx = r * (1 + wide * .12), ry = r * 1.12 * open;
+      g.lineWidth = 1.5;
+      oval(g, ex + look * r * .12, ey - gaze * r * .1, rx, ry, mix('#2A2230', '#FFF3A0', light * .25), line === outline ? null : line);
+      oval(g, ex - rx * .32 + look * r * .3, ey - ry * .36 - gaze * r * .2, rx * .34, Math.min(ry * .34, rx * .34), '#FFFDF5');
+      oval(g, ex + rx * .34 + look * r * .3, ey + ry * .34 - gaze * r * .2, rx * .16, Math.min(ry * .16, rx * .16), 'rgba(255,253,245,.8)');
+      g.restore(); return;
+    }
+    const ry = (r + 1) * open;
+    g.lineWidth = 2.1;
+    oval(g, ex, ey, r + .5, ry + .4, '#FFFDF5', outline);
+    const ix = ex + look * r * .27, iy = ey - gaze * r * .2, rx = r * .76, iry = ry * .88;
+    g.save(); g.beginPath(); g.ellipse(ex, ey, r + .5, ry + .4, 0, 0, TAU); g.clip();
+    oval(g, ix, iy, rx, iry, mix(iris, '#FFF3A0', light));
+    if (kind === 'slit') oval(g, ix, iy, 1.65, ry * .66, outline);
+    else oval(g, ix, iy, rx * (.62 + wide * .08), iry * (.62 + wide * .08), '#2A2230');
+    oval(g, ix - rx * .36, iy - iry * .4, rx * .34, rx * .34, '#FFFDF5');
+    if (kind !== 'slit') oval(g, ix + rx * .36, iy + iry * .38, rx * .16, rx * .16, 'rgba(255,253,245,.85)');
+    g.restore();
+    g.restore();
+  }
+  // a small pink blush under an eye
+  function blush(g, x, y, r, a = .5) { oval(g, x, y, r, r * .62, `rgba(244,120,130,${a})`); }
+  // a row of round scallops along a curve from a to b, bulging to one side: fluff, feathers, quills
+  function scallops(p, pts, bulge) {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [x0, y0] = pts[i], [x1, y1] = pts[i + 1];
+      const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1;
+      if (i === 0) p.moveTo(x0, y0);
+      p.quadraticCurveTo(mx + dy / len * bulge, my - dx / len * bulge, x1, y1);
+    }
+  }
+  const beat = (u, a, b) => Math.sin(Math.PI * clamp01((u - a) / (b - a)));
+  return { outline, path, shape, oval, tintOf, texture, detail, within, shadeLow, eye, blush, scallops, beat, kinds: {} };
+})();
+
+// ===== pets/bird.js =====
+// The small bird: to begin with a grey body, a yellow face under a tall crest, a round orange cheek and a pale bar on the wing.
+// Change the parts and it is a budgie, a robin, a canary or a bird nobody has seen yet.
+PetArt.kinds.bird = (() => {
+  const { outline, path, shape, oval, tintOf, detail, within, eye, beat } = PetArt;
+  const defaults = Object.freeze({
+    body: '#B3AFBD', belly: '#CFCBD6', face: '#FFE169', crest: '#FFD23F', cheek: '#FF8A3D', wing: '#8D8898', beak: '#F3A45C',
+    designs: Object.freeze({ belly: 'plain', face: 'full', crest: 'tall', cheek: 'round', wing: 'bar' }),
+  });
+  const regions = [
+    ['body', 'Body', [-4, -26, 1.3]], ['belly', 'Tummy', [6, -18, 1.8]], ['face', 'Face', [6, -52, 1.6]], ['crest', 'Crest', [-2, -80, 1.6]],
+    ['cheek', 'Cheeks', [14, -46, 2.4]], ['wing', 'Wing', [-16, -26, 1.8]], ['beak', 'Beak and feet', [8, -46, 2.2]],
+  ];
+  const styles = { belly: ['plain', 'speckled'], face: ['full', 'front'], crest: ['tall', 'curl', 'spiky'], cheek: ['round', 'heart'], wing: ['bar', 'scallops', 'plain'] };
+  const styleOf = (col, k) => (styles[k].includes(col.designs?.[k]) ? col.designs[k] : styles[k][0]);
+
+  const body = 'M-24 -24 Q-26 -46 -6 -50 Q18 -52 23 -30 Q26 -10 10 -4 Q-2 -1 -12 -5 Q-22 -10 -24 -24Z';
+  const head = 'M-15 -51 Q-16 -72 6 -73 Q28 -72 28 -51 Q28 -35 6 -34 Q-15 -35 -15 -51Z';
+  const tail = 'M-12 -16 Q-30 -16 -50 -7 Q-56 -3 -51 0 Q-44 2 -36 -1 Q-22 -4 -10 -6Z';
+  const wing = 'M-17 -43 Q-30 -34 -29 -19 Q-28 -8 -18 -8 Q-6 -12 -3 -26 Q-3 -38 -17 -43Z';
+  const farWing = 'M14 -42 Q30 -38 33 -22 Q33 -12 24 -12 Q14 -16 10 -28Z';
+  const tall = ['M4 -70 Q4 -90 -8 -102 Q-13 -106 -14 -100 Q-8 -88 -8 -70Z', 'M-3 -70 Q-6 -84 -18 -92 Q-23 -94 -22 -88 Q-14 -80 -12 -68Z', 'M-9 -67 Q-14 -76 -25 -79 Q-29 -79 -27 -74 Q-20 -70 -15 -63Z'];
+  const curl = 'M6 -70 Q8 -88 -4 -94 Q-16 -98 -20 -88 Q-22 -79 -13 -79 Q-8 -80 -10 -85 Q-4 -84 -6 -70Z';
+  const spiky = 'M12 -70 L10 -86 L3 -76 L-2 -92 L-7 -76 L-16 -88 L-14 -70 L-22 -74 L-14 -62Z';
+  const beakTop = 'M2 -52 Q9 -58 16 -52 Q15 -46 9 -42 Q3 -46 2 -52Z';
+
+  function wingMarks(g, col) {
+    const kind = styleOf(col, 'wing');
+    const pale = hexToHsl(col.wing)[2] < .62 ? mix(col.wing, '#FFFFFF', .8) : tintOf(col.wing, 1.2);
+    if (kind === 'bar') shape(g, 'M-32 -30 Q-18 -20 -2 -26 L-3 -17 Q-18 -11 -31 -21Z', pale, null);
+    if (kind === 'scallops') {
+      g.lineWidth = 2; shape(g, 'M-26 -30 Q-22 -25 -18 -30 Q-14 -25 -10 -30 M-27 -21 Q-23 -16 -19 -21 Q-15 -16 -11 -21 Q-8 -17 -5 -21', null, pale); g.lineWidth = 3.3;
+    }
+  }
+
+  function paint(g, x, y, s, col = defaults, pose = {}) {
+    const { dir = 1, hop = 0, shiver = 0, look = 0, gaze = 0, blink = 0, happy = 0, wide = 0, light = 0, tilt = 0, flap = 0, spread = 0, far = 0, crestUp = 0,
+      bob = 0, puff = 0, preen = 0, lean = 0, open = 0, step = 0, squash = 0, dangle = 0, stretch = 0 } = pose;
+    g.save(); g.translate(x + s * shiver, y - s * hop); g.scale(dir * s, s);
+    g.lineCap = g.lineJoin = 'round'; g.lineWidth = 3.3;
+    const big = 1 + puff * .2;
+
+    // feet: tucked under it in the air
+    const legs = col.beak;
+    for (const [fx, f] of [[-5, -1], [9, 1]]) {
+      g.save(); g.translate(fx, 0); g.translate(0, -dangle * 3); g.rotate(step * f * .3 + dangle * .5);
+      g.lineWidth = 3; g.strokeStyle = outline; g.beginPath(); g.moveTo(0, -9); g.lineTo(0, -2); g.stroke();
+      g.lineWidth = 2.6; shape(g, 'M-6 0 Q-5 -4 0 -4 Q6 -5 8 -1 Q8 1 5 1 L-4 1 Q-6 1 -6 0Z', legs);
+      g.lineWidth = 1.5; shape(g, 'M0 1 L0 -2 M4 1 L4 -2', null, detail(legs));
+      g.restore();
+    }
+    g.lineWidth = 3.3;
+    g.save(); g.translate(0, -4); g.rotate(-lean * .2); g.scale(big * (1 + squash * .1), big * (1 - squash * .1)); g.translate(0, 4);
+
+    g.save(); g.translate(-12, -12); g.rotate(-lean * .15 + flap * .12 - stretch * .3); g.translate(12, 12);
+    within(g, tail, col.wing, () => { g.lineWidth = 2; shape(g, 'M-20 -11 Q-34 -9 -46 -4', null, tintOf(col.wing, .7)); });
+    g.restore(); g.lineWidth = 3.3;
+    // the far wing shows when it flaps
+    if (far > .02) {
+      g.save(); g.translate(12, -36); g.rotate(-.5 - flap * .9 * far); g.scale(.6 + far * .7, .6 + far * .7); g.translate(-12, 36);
+      shape(g, farWing, shade(col.wing, -.08)); g.restore();
+    }
+    within(g, body, col.body, () => {
+      oval(g, 9, -18, 15, 17, col.belly);
+      if (styleOf(col, 'belly') === 'speckled') { g.lineWidth = 1.9; shape(g, 'M2 -28 l3 3 l3 -3 M11 -22 l3 3 l3 -3 M1 -16 l3 3 l3 -3 M10 -10 l3 3 l3 -3', null, tintOf(col.belly, 1.1)); g.lineWidth = 3.3; }
+      g.fillStyle = rgba(outline, .12); g.fillRect(-40, -9, 80, 12);
+    });
+
+    // the head, over the body
+    g.save();
+    g.translate(6, -36); g.translate(preen * -8, -bob * 5 + puff * 5 + preen * 6 - gaze * 1.5); g.rotate(tilt + look * .06 - gaze * .22 - preen * .5); g.translate(-6, 36);
+    const crestKind = styleOf(col, 'crest');
+    g.save(); g.translate(-2, -68); g.rotate(-crestUp * .5 + .22 + (crestUp < 0 ? -crestUp * .35 : 0)); g.scale(1, 1 + crestUp * .12); g.translate(2, 68);
+    if (crestKind === 'tall') for (const [i, d] of tall.entries()) { g.save(); g.translate(-4, -68); g.rotate((2 - i) * crestUp * .1); g.translate(4, 68); shape(g, d, i ? shade(col.crest, -.05 * i) : col.crest); g.restore(); }
+    else shape(g, crestKind === 'curl' ? curl : spiky, col.crest);
+    g.restore();
+    within(g, head, styleOf(col, 'face') === 'front' ? col.body : col.face, () => {
+      if (styleOf(col, 'face') === 'front') oval(g, 11, -50, 17, 19, col.face);
+      shape(g, 'M-9 -60 Q-6 -67 2 -69', null, 'rgba(255,255,255,.45)');
+    });
+    const cheek = (cx, cy, r) => {
+      if (styleOf(col, 'cheek') === 'heart') {
+        g.save(); g.translate(cx, cy); g.scale(r / 6, r / 6);
+        shape(g, 'M0 5 Q-8 -1 -5 -5 Q-2 -8 0 -4 Q2 -8 5 -5 Q8 -1 0 5Z', col.cheek, null); g.restore();
+      } else oval(g, cx, cy, r, r * .9, col.cheek);
+    };
+    g.save(); g.clip(path(head)); cheek(-10, -46, 5.5); cheek(22, -46, 6.2); g.restore();
+    // the beak: the lower half drops when it sings or pants
+    if (open > .05) { g.lineWidth = 2.4; shape(g, `M4 -47 Q9 ${-41 + open * 6} 14 -47Z`, shade(col.beak, -.18)); }
+    g.lineWidth = 2.6; shape(g, beakTop, col.beak);
+    g.lineWidth = 1.4; shape(g, 'M7 -52 L7.5 -51 M11 -52 L10.5 -51', null, detail(col.beak));
+    const o = { blink, happy, wide, look, gaze, light, kind: 'bead', line: detail(col.face) };
+    eye(g, -4, -56, 4.3, o); eye(g, 20, -56, 4.3, o);
+    g.restore();
+
+    // the near wing: folded, lifted to flap, or opened to stretch
+    g.lineWidth = 3.3;
+    g.save(); g.translate(-12, -40); g.rotate(flap * (.5 + spread * .9) + spread * .95 + stretch * .7); g.scale(1 + spread * .25 + stretch * .2, 1 + spread * .3 + stretch * .25); g.translate(12, 40);
+    within(g, wing, col.wing, () => wingMarks(g, col));
+    g.restore();
+    g.restore();
+    g.restore();
+  }
+
+  function act({ age, u, a, reaction, rise, look, gaze, colors, moving }) {
+    const idle = age % 27;
+    const pose = { look, gaze, blink: beat(age % 3.6, 3.3, 3.48), step: rise, hop: rise * 7, flap: rise ? Math.sin(age * 30) * .4 : 0, spread: rise * .3, far: rise * .4, crestUp: rise * .4 };
+    let col = colors;
+    switch (reaction) {
+      case 'pet':    // the crest goes up and it bobs
+        pose.crestUp = a; pose.happy = beat(u, .1, .86); pose.bob = Math.sin(u * TAU * 4) * a; pose.flap = Math.sin(u * TAU * 9) * a * .5; pose.spread = .18 * a; pose.open = a * .6; break;
+      case 'fire':   // wings held out to cool, beak open
+        pose.spread = a * .8; pose.far = a; pose.flap = Math.sin(u * TAU * 3) * .12 * a; pose.open = a; pose.blink = .6 * a; pose.crestUp = -a; break;
+      case 'glow':
+        pose.light = smoothstep(0, .26, u) * (1 - smoothstep(.62, 1, u)); pose.wide = a; pose.crestUp = a;
+        pose.tilt = Math.sin(u * TAU * 1.25) * .2 * a; pose.bob = a; pose.gaze = a * .5; pose.look = Math.sin(u * TAU * 1.25) * a; break;
+      case 'float': { // up it flutters after her
+        const up = smoothstep(.05, .35, u) * (1 - smoothstep(.7, .95, u));
+        pose.hop = up * 34 + Math.sin(u * TAU * 3) * 3 * up; pose.spread = up; pose.far = up; pose.flap = Math.sin(u * TAU * 11) * up; pose.dangle = up; pose.gaze = up * .7; pose.crestUp = up * .6; break;
+      }
+      case 'giant':  // leans right back to look up, crest flat
+        pose.lean = a * .5; pose.gaze = a; pose.wide = a; pose.crestUp = -a; break;
+      case 'tiny':   // peers down, head right over on one side, then the other
+        pose.tilt = Math.sin(u * TAU * 1.1) * .5 * a; pose.gaze = -.5 * a; pose.wide = a * .7; pose.crestUp = a * .5; pose.bob = -a; break;
+      case 'rainbow': {
+        const tint = (k, i) => mix(colors[k], hslToHex(u * 1.8 + i * .23, .87, .66), a);
+        col = { ...colors, crest: tint('crest', 0), cheek: tint('cheek', 1), wing: tint('wing', 2), belly: tint('belly', 3) };
+        pose.crestUp = a; pose.wide = a; break;
+      }
+      case 'ice':    // a round ball of feathers, shivering
+        pose.puff = a; pose.shiver = Math.sin(u * TAU * 10) * 2.6 * a; pose.blink = .85 * beat(u, .17, .93); pose.crestUp = -a * .6; break;
+      case 'bouncy':
+        pose.hop = Math.max(pose.hop, Math.abs(Math.sin(u * Math.PI * 3)) * a * 15); pose.spread = .35 * a; pose.far = .5 * a; pose.flap = Math.sin(u * Math.PI * 6) * a * .6;
+        pose.happy = a > .5 ? 1 : 0; pose.crestUp = a; pose.squash = -.3 * Math.abs(Math.sin(u * Math.PI * 3)) * a; break;
+      case 'play':   // the ball came by: a flap and a hop over it
+        pose.hop = Math.max(pose.hop, beat(u, 0, .45) * 16); pose.spread = beat(u, 0, .5) * .7; pose.far = pose.spread; pose.flap = Math.sin(u * TAU * 9) * a; pose.crestUp = a; pose.wide = a * .6; break;
+      case 'sleep':  // a round ball of feathers, eyes shut
+        pose.puff = a * .8; pose.blink = a > .4 ? 1 : pose.blink; pose.crestUp = -a * .7; pose.look = look * (1 - a); break;
+      default:
+        if (!moving) {
+          const p = beat(idle, 5.5, 9);        // preens its wing
+          if (p > 0) { pose.preen = smoothstep(0, .35, p); pose.blink = pose.preen > .6 ? 1 : pose.blink; pose.bob = Math.sin(idle * 11) * .5 * pose.preen; pose.stretch = .25 * pose.preen; }
+          const d = beat(idle, 13.5, 17.5);    // a little song: crest up, bobbing, beak going
+          if (d > 0) { pose.crestUp = smoothstep(0, .3, d); pose.bob = Math.sin(idle * 9) * pose.crestUp; pose.open = Math.max(0, Math.sin(idle * 9)) * pose.crestUp; pose.happy = d > .45 ? 1 : 0; }
+          const w = beat(idle, 21, 23.4);      // a long stretch of one wing
+          if (w > 0) { pose.stretch = smoothstep(0, .5, w); pose.lean = -.3 * pose.stretch; }
+        }
+    }
+    return { pose, col };
+  }
+
+  return {
+    name: 'Bird', defaults, regions, styles, paint, act, cost: 6, eye: 'bead',
+    alone: [['preen', 7.2], ['song', 15.2], ['song 2', 15.55], ['stretch', 22.2]],
+    looks: [
+      {},
+      { body: '#7FD36B', belly: '#C9F2A8', face: '#FFE169', crest: '#7FD36B', cheek: '#5B6BD9', wing: '#3E8E4A', beak: '#F3A45C', designs: { crest: 'curl', wing: 'scallops', face: 'front' } },
+      { body: '#8A5A3C', belly: '#F0703C', face: '#8A5A3C', crest: '#8A5A3C', cheek: '#F0703C', wing: '#6B442C', beak: '#3A3340', designs: { crest: 'curl', wing: 'plain', cheek: 'heart', belly: 'speckled' } },
+      { body: '#FFFDF5', belly: '#FFFDF5', face: '#FFFDF5', crest: '#FFE169', cheek: '#FFB7C5', wing: '#FFFDF5', beak: '#F3A45C', designs: { crest: 'spiky', wing: 'plain' } },
+      { body: INK, belly: INK, face: INK, crest: INK, cheek: INK, wing: INK, beak: INK },
+      { body: PALETTE[7], belly: PALETTE[8], face: PALETTE[5], crest: PALETTE[2], cheek: PALETTE[3], wing: PALETTE[1], beak: PALETTE[4], designs: { crest: 'spiky', cheek: 'heart', wing: 'scallops', belly: 'speckled', face: 'front' } },
+    ],
+    box: { front: 48, back: 68, head: 44, top: 118, tall: 126, low: 62, neck: 36 },
+    reach: 104, view: [58, 97, .84], card: [94, 152, 1.3], thumb: [36, .47], head: [6, 60], pitch: 9,
+    hit: (x, y) => (x > -34 && x < 34 && y > -80 && y < 5) || (x > -30 && x < 14 && y > -104 && y < -68),
+    gait: { stride: 20, lift: 9, speed: 190 }, shadow: [-4, 30],
+  };
+})();
+
+// ===== pets/hedgehog.js =====
+// The hedgehog: a round back of quills, a soft face with a pointed nose, small ears and paws.
+// It is the one that can roll itself into a ball.
+PetArt.kinds.hedgehog = (() => {
+  const { outline, path, shape, oval, tintOf, detail, within, eye, blush, beat } = PetArt;
+  const defaults = Object.freeze({
+    quills: '#8A5F45', tips: '#F3DDB8', face: '#F6DDB5', belly: '#FFF3DC', ear: '#D9A27E', nose: '#3A2F3B', cheek: '#F58A9B',
+    designs: Object.freeze({ quills: 'spiky', tips: 'tips', cheek: 'round' }),
+  });
+  const regions = [
+    ['quills', 'Quills', [-10, -34, 1.2]], ['tips', 'Quill tips', [-16, -50, 1.7]], ['face', 'Face', [18, -30, 1.8]], ['belly', 'Tummy', [6, -10, 1.9]],
+    ['ear', 'Ears and paws', [6, -46, 2.2]], ['nose', 'Nose', [36, -24, 2.8]], ['cheek', 'Cheeks', [16, -24, 2.6]],
+  ];
+  const styles = { quills: ['spiky', 'soft'], tips: ['tips', 'bands', 'dots', 'plain'], cheek: ['round', 'heart'] };
+  const styleOf = (col, k) => (styles[k].includes(col.designs?.[k]) ? col.designs[k] : styles[k][0]);
+
+  // The back: a dome of quills from behind its feet, over the top, to its brow. full: the whole way round (a ball).
+  function dome(cx, cy, rx, ry, from, to, n, tooth, soft, closeTo) {
+    const p = new Path2D();
+    for (let i = 0; i <= n; i++) {
+      const a0 = lerp(from, to, i / n), x0 = cx + Math.cos(a0) * rx, y0 = cy + Math.sin(a0) * ry;
+      if (i === 0) { p.moveTo(x0, y0); continue; }
+      const am = lerp(from, to, (i - .5) / n), tx = cx + Math.cos(am) * (rx + tooth), ty = cy + Math.sin(am) * (ry + tooth);
+      if (soft) p.quadraticCurveTo(tx + Math.cos(am) * tooth * .5, ty + Math.sin(am) * tooth * .5, x0, y0);
+      else {
+        const ap = lerp(from, to, (i - 1) / n), xp = cx + Math.cos(ap) * rx, yp = cy + Math.sin(ap) * ry;
+        p.quadraticCurveTo(lerp(xp, tx, .7), lerp(yp, ty, .7) , tx, ty); p.quadraticCurveTo(lerp(x0, tx, .7), lerp(y0, ty, .7), x0, y0);
+      }
+    }
+    if (closeTo) for (const [x, y] of closeTo) p.lineTo(x, y);
+    p.closePath();
+    return p;
+  }
+  function quillMarks(g, col, cx, cy, r) {
+    const kind = styleOf(col, 'tips'), c = col.tips;
+    if (kind === 'bands') {
+      g.lineWidth = 4; g.strokeStyle = c;
+      for (const k of [.42, .74]) { g.beginPath(); g.ellipse(cx, cy, r * k * 1.1, r * k, 0, Math.PI * .95, Math.PI * 1.95); g.stroke(); }
+    } else if (kind === 'dots') {
+      for (const [a, k] of [[3.5, .5], [4.2, .72], [4.9, .45], [5.4, .74], [3.0, .8], [4.55, .2], [5.9, .5]]) oval(g, cx + Math.cos(a) * r * k * 1.1, cy + Math.sin(a) * r * k, 3.4, 3.4, c);
+    } else if (kind === 'tips') {
+      g.lineWidth = 2.2; g.strokeStyle = c; g.beginPath();
+      for (const [a, k] of [[3.4, .55], [4.0, .7], [4.5, .42], [5.0, .72], [5.6, .5], [3.9, .28], [5.2, .2], [3.05, .82], [4.55, .86]]) {
+        const x = cx + Math.cos(a) * r * k * 1.1, y = cy + Math.sin(a) * r * k;
+        g.moveTo(x - 2.4, y + 1.4); g.lineTo(x, y - 3); g.lineTo(x + 2.4, y + 1.4);
+      }
+      g.stroke();
+    }
+  }
+  const faceD = 'M2 -45 Q20 -48 31 -35 Q38 -31 42 -26 Q44 -21 39 -18 Q32 -15 28 -10 Q20 -3 6 -4 Q-9 -6 -10 -24 Q-10 -41 2 -45Z';
+  const paw = 'M-6 0 Q-7 -6 0 -7 Q7 -6 6 0 Q4 2 0 2 Q-4 2 -6 0Z';
+
+  function paint(g, x, y, s, col = defaults, pose = {}) {
+    const { dir = 1, hop = 0, shiver = 0, look = 0, gaze = 0, blink = 0, happy = 0, wide = 0, light = 0, curl = 0, roll = 0, bristle = 0, stand = 0,
+      reach = 0, sniff = 0, flat = 0, yawn = 0, step = 0, squash = 0, peek = 0 } = pose;
+    const soft = styleOf(col, 'quills') === 'soft';
+    const tooth = (soft ? 5 : 6.5) + bristle * 4;
+    g.save(); g.translate(x + s * shiver, y - s * hop); g.scale(dir * s, s);
+    g.lineCap = g.lineJoin = 'round'; g.lineWidth = 3.3;
+
+    if (curl > .55) {
+      // a ball: quills all the way round, its face tucked in at the front
+      const r = 25 + bristle * 1.5;
+      g.save(); g.translate(0, -r - 3); g.scale(1 + squash * .12, 1 - squash * .12); g.rotate(roll);
+      const ball = dome(0, 0, r, r, 0, TAU, 20, tooth, soft);
+      within(g, ball, styleOf(col, 'tips') === 'tips' ? col.tips : col.quills, () => {
+        if (styleOf(col, 'tips') === 'tips') oval(g, 0, 0, r - 1, r - 1, col.quills);
+        quillMarks(g, col, 0, 0, r * 1.1);
+        g.rotate(-roll); g.fillStyle = rgba(outline, .12); g.fillRect(-40, r * .55, 80, 30); g.rotate(roll);
+      });
+      const out = clamp01(peek);   // how far the face is out of the ball
+      g.save(); g.translate(13 + out * 4, 4); g.rotate(.2);
+      g.lineWidth = 2.8; oval(g, 0, 0, 11 + out * 3, 9 + out * 3, col.face, outline);
+      const o = { blink: out > .3 ? blink : 1, happy: out > .3 ? happy : 0, wide, kind: 'bead', line: detail(col.face) };
+      eye(g, -5, -2 - out, 3.2, o); eye(g, 5, -3 - out, 3.2, o);
+      oval(g, 9 + out * 5, 3, 3.6, 3.1, col.nose, detail(col.nose) === outline ? null : detail(col.nose));
+      g.restore();
+      g.restore(); g.restore();
+      return;
+    }
+
+    const tuck = curl / .55;   // on its way into a ball
+    g.save(); g.translate(-20, 0); g.rotate(-stand * .78 + step * .05); g.translate(20, 0);
+    g.scale(1 + flat * .22 + squash * .08, 1 - flat * .3 - squash * .1);
+    // the hind foot and the front paws: under it, out flat when it basks, up when it stands
+    g.lineWidth = 2.8;
+    g.save(); g.translate(-22 - flat * 16, 0); g.rotate(-flat * 1.2); shape(g, paw, col.ear); g.restore();
+    for (const [px, far] of [[9, true], [23, false]]) {
+      g.save(); g.translate(px + flat * 14 + reach * 5 + stand * (far ? 2 : 8), -stand * (far ? 15 : 20) - (far ? 0 : Math.max(0, step) * 3)); g.rotate(flat * 1.2 - stand * 1.3);
+      shape(g, paw, far ? shade(col.ear, -.08) : col.ear);
+      g.lineWidth = 1.5; shape(g, 'M-2 1 L-2 -2 M2 1 L2 -2', null, detail(col.ear)); g.lineWidth = 2.8;
+      g.restore();
+    }
+    g.lineWidth = 3.3;
+    // the back
+    const back = dome(-8, -24, 37 - tuck * 6, 33 - tuck * 3, Math.PI * .8, Math.PI * 1.98 + tuck * .5, 13, tooth, soft, [[30, -6], [-28, -3]]);
+    within(g, back, styleOf(col, 'tips') === 'tips' ? col.tips : col.quills, () => {
+      if (styleOf(col, 'tips') === 'tips') { oval(g, -8, -22, 35 - tuck * 6, 31 - tuck * 3, col.quills); }
+      quillMarks(g, col, -8, -24, 36);
+      g.fillStyle = rgba(outline, .12); g.fillRect(-60, -9, 110, 14);
+    });
+    // the face and tummy, in front of the quills
+    g.save(); g.translate(8, -24); g.translate(reach * 6 - tuck * 6, tuck * 3 + reach * 3 - gaze * 2); g.rotate(look * .04 - gaze * .2 + reach * .14); g.scale(1 - tuck * .22, 1 - tuck * .22); g.translate(-8, 24);
+    for (const [ex, ey, r] of [[-3, -43, 6], [15, -47, 6.4]]) { g.lineWidth = 2.8; oval(g, ex, ey, r, r, col.ear, outline); oval(g, ex + .5, ey + .5, r * .5, r * .5, mix(col.ear, '#F58A9B', .5)); }
+    g.lineWidth = 3.3;
+    within(g, faceD, col.face, () => {
+      oval(g, 6, -4, 24, 14, col.belly);
+      shape(g, 'M-3 -37 Q2 -42 9 -42', null, 'rgba(255,255,255,.5)');
+    });
+    const nx = 41 + Math.sin(sniff * TAU) * 1.2, ny = -24 + Math.cos(sniff * TAU * 2) * 1.2;
+    g.lineWidth = 1.6; oval(g, nx, ny, 4.6, 4, col.nose, detail(col.nose) === outline ? null : detail(col.nose)); oval(g, nx - 1.4, ny - 1.5, 1.4, 1, 'rgba(255,255,255,.7)');
+    const o = { blink, happy, wide, look, gaze, light, kind: 'bead', line: detail(col.face) };
+    eye(g, 9, -31, 3.9, o); eye(g, 25, -33, 3.9, o);
+    const heart = styleOf(col, 'cheek') === 'heart';
+    for (const [cx, cy, r] of [[4, -23, 4.2], [24, -24.5, 4]]) {
+      if (heart) { g.save(); g.translate(cx, cy); g.scale(r / 5.5, r / 5.5); shape(g, 'M0 5 Q-8 -1 -5 -5 Q-2 -8 0 -4 Q2 -8 5 -5 Q8 -1 0 5Z', col.cheek, null); g.restore(); }
+      else oval(g, cx, cy, r, r * .66, rgba(col.cheek, .75));
+    }
+    g.lineWidth = 2;
+    if (yawn > .08) oval(g, 31, -16.5, 2.6 + yawn * 1.6, 1.2 + yawn * 4, '#7A3340', outline);
+    else shape(g, 'M26 -17 Q30 -14 34 -17', null, detail(col.face));
+    g.restore();
+    g.restore();
+    g.restore();
+  }
+
+  function act({ age, u, a, reaction, rise, look, gaze, colors, moving }) {
+    const idle = age % 28;
+    const pose = { look, gaze, blink: beat(age % 4.9, 4.5, 4.7), step: rise ? Math.sin(age * 16) : 0, hop: rise * 3.5, sniff: age * 1.3, squash: rise * .3 };
+    let col = colors;
+    switch (reaction) {
+      case 'pet': {  // shy for a moment, then out it comes
+        const shy = beat(u, 0, .34);
+        pose.curl = shy * .5; pose.happy = u > .3 ? beat(u, .3, .92) : 0; pose.blink = u < .3 ? 1 : pose.blink; pose.sniff = u * 9; pose.hop = Math.max(pose.hop, u > .34 ? Math.abs(Math.sin((u - .34) * Math.PI * 4.5)) * 3.5 * a : 0);
+        break;
+      }
+      case 'fire':   // basks, flat out
+        pose.flat = beat(u, .04, .93); pose.happy = pose.flat > .4 ? 1 : 0; pose.bristle = -.6 * a; break;
+      case 'glow':
+        pose.light = smoothstep(0, .26, u) * (1 - smoothstep(.62, 1, u)); pose.wide = a; pose.gaze = a * .9; pose.sniff = u * 14; pose.reach = .5 * a; pose.look = Math.sin(u * TAU * 1.25) * a; break;
+      case 'float':  // up on its hind legs after her
+        pose.stand = smoothstep(.04, .3, u) * (1 - smoothstep(.72, .95, u)); pose.gaze = pose.stand * .6; pose.wide = a * .6; pose.sniff = u * 9; break;
+      case 'giant': { // a ball, quick, and then a peek
+        const ball = smoothstep(.03, .12, u) * (1 - smoothstep(.8, .92, u));
+        pose.curl = ball; pose.bristle = ball * (1 - smoothstep(.3, .6, u)); pose.peek = smoothstep(.4, .62, u); pose.wide = 1; pose.squash = beat(u, .03, .2) * .5; break;
+      }
+      case 'tiny':   // nose down, sniffing towards her
+        pose.reach = a; pose.gaze = -.6 * a; pose.sniff = u * 22; pose.wide = a * .5; break;
+      case 'rainbow': {
+        const tint = (k, i) => mix(colors[k], hslToHex(u * 1.8 + i * .31, .87, .66), a);
+        col = { ...colors, quills: tint('quills', 0), tips: tint('tips', 1) };
+        pose.bristle = a * .6; pose.wide = a; break;
+      }
+      case 'ice':    // a tight ball, shivering, quills out
+        pose.curl = smoothstep(.03, .14, u) * (1 - smoothstep(.82, .94, u)); pose.bristle = a; pose.shiver = Math.sin(u * TAU * 10) * 2.6 * a; pose.peek = 0; break;
+      case 'bouncy': { // a ball that bounces
+        const ball = smoothstep(.02, .1, u) * (1 - smoothstep(.86, .95, u));
+        pose.curl = ball; pose.hop = Math.abs(Math.sin(u * Math.PI * 3)) * a * 17; pose.roll = u * TAU * 2 * ball; pose.peek = u > .86 ? 1 : 0;
+        pose.squash = -.4 * Math.abs(Math.sin(u * Math.PI * 3)) * a + (Math.abs(Math.sin(u * Math.PI * 3)) < .15 ? .5 : 0); break;
+      }
+      case 'play': { // the ball came by: into a ball itself, quills out, and the ball bounces off
+        const ball = beat(u, 0, .42);
+        pose.curl = ball > .25 ? 1 : ball * 2; pose.bristle = ball; pose.peek = smoothstep(.2, .4, u); pose.wide = a; break;
+      }
+      case 'sleep':  // rolled up, only its nose out
+        pose.curl = a; pose.peek = .55; pose.blink = 1; pose.bristle = -.4 * a; break;
+      default:
+        if (!moving) {
+          const n = beat(idle, 5, 9);          // snuffles along the ground
+          if (n > 0) { pose.reach = smoothstep(0, .3, n); pose.gaze = -.5 * pose.reach; pose.sniff = idle * 5; pose.look = Math.sin(idle * 2.2); }
+          const yw = beat(idle, 13, 15.4);     // a great yawn
+          if (yw > 0) { pose.yawn = smoothstep(.1, .5, yw); pose.blink = yw > .2 ? 1 : pose.blink; pose.gaze = .3 * pose.yawn; }
+          const r = beat(idle, 20, 24.5);      // rolls up, rocks, and unrolls
+          if (r > 0) { pose.curl = smoothstep(0, .16, r); pose.roll = Math.sin(idle * 4.2) * .5 * pose.curl; pose.peek = .6 + .4 * Math.sin(idle * 2.1); pose.happy = 1; }
+        }
+    }
+    return { pose, col };
+  }
+
+  return {
+    name: 'Hedgehog', defaults, regions, styles, paint, act, cost: 7, eye: 'bead',
+    alone: [['snuffle', 7], ['yawn', 14.2], ['rolled up', 22.2], ['rolled up 2', 23]],
+    looks: [
+      {},
+      { quills: '#B9B4C0', tips: '#FFFDF5', face: '#FFFDF5', belly: '#FFFDF5', ear: '#FFC1C8', nose: '#F58A9B', cheek: '#F58A9B', designs: { quills: 'soft' } },
+      { quills: '#3A3340', tips: '#FFE169', face: '#F6DDB5', belly: '#FFF3DC', ear: '#D9A27E', designs: { tips: 'bands' } },
+      { quills: '#F0703C', tips: '#FFFDF5', face: '#FFD9A8', belly: '#FFF3DC', ear: '#F0703C', designs: { tips: 'dots', cheek: 'heart', quills: 'soft' } },
+      { quills: INK, tips: INK, face: INK, belly: INK, ear: INK, nose: INK, cheek: INK },
+      { quills: PALETTE[7], tips: PALETTE[8], face: PALETTE[5], belly: PALETTE[2], ear: PALETTE[3], nose: PALETTE[1], cheek: PALETTE[4], designs: { tips: 'dots', cheek: 'heart' } },
+    ],
+    box: { front: 60, back: 64, head: 64, top: 78, tall: 84, low: 78, neck: 36 },
+    reach: 112, view: [52, 88, .98], card: [84, 132, 1.42], thumb: [31, .52], head: [14, 44], pitch: 5,
+    hit: (x, y) => x > -50 && x < 48 && y > -66 && y < 5,
+    gait: { stride: 15, lift: 3.5, speed: 120 }, shadow: [-3, 40],
+  };
+})();
+
+// ===== pets/puppy.js =====
+// The puppy: fluffy to begin with (a thick coat, a big ruff, a dark mask, a plumed tail curled over its back).
+// Every part can be changed, so a short-haired dog, a spotted one and a floppy-eared one are all this puppy.
+PetArt.kinds.puppy = (() => {
+  const { outline, path, shape, oval, tintOf, detail, within, eye, blush, beat } = PetArt;
+  const defaults = Object.freeze({
+    coat: '#BDB8C6', marks: '#857E90', bib: '#F8EEDB', mask: '#5E5566', ear: '#5E5566', tail: '#F8EEDB', eyes: '#7A4B2A',
+    designs: Object.freeze({ marks: 'saddle', bib: 'fluffy', mask: 'muzzle', ear: 'pointed', tail: 'plume' }),
+  });
+  const regions = [
+    ['coat', 'Coat', [-6, -30, 1]], ['marks', 'Markings', [-8, -34, 1.1]], ['bib', 'Chest and paws', [10, -20, 1.5]],
+    ['mask', 'Face', [8, -56, 1.5]], ['ear', 'Ears', [6, -78, 1.6]], ['tail', 'Tail', [-42, -44, 1.6]], ['eyes', 'Eyes', [8, -62, 2.6]],
+  ];
+  const styles = {
+    marks: ['plain', 'saddle', 'patches', 'spots'], bib: ['fluffy', 'smooth'], mask: ['muzzle', 'mask', 'patch', 'blaze'],
+    ear: ['pointed', 'floppy'], tail: ['plume', 'whip'],
+  };
+
+  const body = 'M-37 -4 Q-46 -22 -36 -38 Q-26 -52 -4 -51 Q18 -51 25 -33 Q30 -17 25 -4 Q23 0 15 0 L-29 0 Q-36 0 -37 -4Z';
+  const haunch = 'M-39 -3 Q-45 -15 -37 -25 Q-28 -33 -17 -27 Q-8 -21 -11 -10 Q-5 -9 -5 -4 Q-6 0 -12 0 L-33 0 Q-39 0 -39 -3Z';
+  const leg = 'M-8 -24 Q-9 -10 -8 -4 Q-8 0 -3 0 L5 0 Q9 0 9 -4 Q7 -12 8 -24Z';
+  const head = 'M-23 -60 Q-25 -84 5 -86 Q35 -86 36 -61 Q37 -42 22 -38 Q6 -34 -10 -39 Q-22 -44 -23 -60Z';
+  const muzzle = 'M-6 -52 Q-5 -61 8 -61 Q22 -62 25 -52 Q27 -42 9 -41 Q-6 -41 -6 -52Z';
+  const plume = 'M-28 -26 Q-40 -18 -51 -25 Q-60 -31 -58 -41 Q-65 -50 -58 -60 Q-56 -71 -44 -71 Q-34 -76 -27 -67 Q-19 -62 -23 -52 Q-17 -45 -24 -38 Q-22 -31 -28 -26Z';
+  const whip = 'M-30 -18 Q-50 -19 -55 -38 Q-58 -52 -50 -55 Q-44 -56 -44 -49 Q-45 -36 -30 -30Z';
+  const ruff = 'M-19 -46 Q-28 -40 -22 -32 Q-24 -23 -14 -22 Q-11 -13 -2 -16 Q4 -9 11 -15 Q19 -10 23 -19 Q32 -21 29 -31 Q35 -38 28 -45 Q5 -58 -19 -46Z';
+  const chest = 'M-8 -40 Q-14 -28 -6 -20 Q2 -13 12 -16 Q22 -20 23 -32 Q22 -40 16 -44 Q4 -48 -8 -40Z';
+  const earL = 'M-21 -66 Q-27 -88 -17 -93 Q-11 -95 -6 -86 L1 -76Z', earR = 'M12 -78 Q18 -95 27 -95 Q35 -94 35 -84 L33 -68Z';
+  const innerL = 'M-17 -72 Q-20 -84 -15 -87 Q-12 -87 -9 -82 L-6 -77Z', innerR = 'M18 -78 Q22 -88 27 -89 Q31 -88 31 -83 L30 -74Z';
+  const flopL = 'M-8 -84 Q-24 -86 -29 -70 Q-33 -54 -26 -49 Q-19 -46 -16 -56 Q-14 -66 -10 -72 Q-5 -78 -8 -84Z';
+  const flopR = 'M22 -85 Q37 -85 41 -69 Q44 -54 37 -50 Q30 -48 28 -58 Q27 -68 23 -74 Q18 -80 22 -85Z';
+
+  const styleOf = (col, k) => (styles[k].includes(col.designs?.[k]) ? col.designs[k] : styles[k][0]);
+
+  function marks(g, col, onHead) {
+    const kind = styleOf(col, 'marks'), c = col.marks;
+    if (kind === 'plain') return;
+    if (kind === 'saddle') {
+      if (!onHead) shape(g, 'M-50 -60 L30 -60 L30 -40 Q8 -34 -12 -31 Q-30 -27 -50 -14Z', c, null);
+    } else if (kind === 'patches') {
+      if (onHead) shape(g, 'M-26 -88 Q-4 -92 0 -76 Q2 -64 -10 -62 Q-22 -62 -30 -56Z', c, null);
+      else { shape(g, 'M-50 -40 Q-34 -54 -18 -46 Q-8 -40 -14 -30 Q-22 -22 -34 -24 Q-44 -22 -50 -12Z', c, null); shape(g, 'M2 -26 Q12 -34 22 -26 Q28 -16 20 -8 Q8 -4 2 -14Z', c, null); }
+    } else {
+      for (const [x, y, r] of onHead ? [[-12, -76, 5.5], [4, -81, 3.6], [29, -72, 4], [-17, -58, 3.4]]
+        : [[-30, -38, 6], [-14, -43, 4], [-36, -22, 4.5], [-20, -27, 5], [17, -42, 4], [-2, -34, 3.6], [20, -10, 4.2]]) oval(g, x, y, r, r * .86, c);
+    }
+  }
+
+  function paint(g, x, y, s, col = defaults, pose = {}) {
+    const { dir = 1, hop = 0, shiver = 0, look = 0, gaze = 0, blink = 0, happy = 0, wide = 0, light = 0, wag = 0, pant = 0, tilt = 0,
+      bow = 0, tall = 0, perk = 0, fluff = 0, ball = 0, step = 0, squash = 0, lick = 0, hot = 0, nod = 0 } = pose;
+    const bibStyle = styleOf(col, 'bib'), maskStyle = styleOf(col, 'mask'), earStyle = styleOf(col, 'ear'), tailStyle = styleOf(col, 'tail');
+    g.save(); g.translate(x + s * shiver, y - s * hop); g.scale(dir * s, s);
+    g.lineCap = g.lineJoin = 'round'; g.lineWidth = 3.3;
+    const puff = 1 + fluff * .1;
+
+    // the tail, behind everything
+    g.save(); g.translate(-28, -27 - tall * 6 - bow * 10); g.rotate(wag + bow * .25 - tall * .12); g.scale(puff, puff); g.translate(28, 27);
+    if (tailStyle === 'plume') {
+      within(g, plume, col.tail, () => { shape(g, 'M-41 -30 Q-46 -40 -40 -47 M-36 -40 Q-40 -50 -34 -57', null, tintOf(col.tail, .55)); });
+    } else shape(g, whip, col.tail);
+    g.restore();
+
+    // the body: rump up and chest down in a play bow, taller when it sits up
+    if (bow > .02) for (const [lx, far] of [[-33, true], [-22, false]]) {
+      g.save(); g.translate(lx, 0); g.scale(1, .55 + bow * .45); shape(g, leg, far ? shade(col.coat, -.1) : col.coat); g.restore();
+    }
+    g.save(); g.translate(18, 0); g.rotate(bow * .3); g.translate(-18, 0);
+    g.save(); g.translate(-30, 0); g.rotate(-tall * .06); g.translate(30, 0);
+    g.scale(1 + squash * .1 + fluff * .05, 1 - squash * .12 + tall * .16 + fluff * .05);
+    within(g, body, col.coat, () => {
+      marks(g, col, false);
+      g.fillStyle = rgba(outline, .12); g.fillRect(-60, -11, 100, 14);
+      shape(g, 'M-34 -33 Q-30 -42 -20 -44', null, 'rgba(255,255,255,.4)');
+    });
+    g.restore();
+    within(g, haunch, col.coat, () => { marks(g, col, false); if (bow < .5) shape(g, 'M-45 -6 Q-22 -13 -2 -9 L-2 4 L-45 4Z', col.bib, null); });
+    if (bow < .5) { g.lineWidth = 1.7; shape(g, 'M-19 -1 L-19 -4 M-13 -1 L-13 -4', null, detail(col.bib)); g.lineWidth = 3.3; }
+    g.restore();
+
+    // front legs: down when it sits, out in front for a bow, up when it begs
+    const legAt = (lx, far) => {
+      g.save(); g.translate(lx + tall * (far ? 9 : 3), -22 - tall * 16 + bow * 15); g.rotate(-bow * 1.32 - tall * (far ? 2.5 : 2.9) + step * (far ? -.22 : .22));
+      g.scale(1, 1 - tall * .25); g.translate(0, 22);
+      shape(g, leg, far ? shade(col.bib, -.08) : col.bib);
+      g.lineWidth = 1.7; shape(g, 'M-2 -1 L-2 -4 M3 -1 L3 -4', null, detail(col.bib)); g.lineWidth = 3.3;
+      g.restore();
+    };
+    if (tall < .3) { legAt(7, true); legAt(18, false); }
+
+    // chest: a ruff of fluff, or a smooth patch
+    g.save(); g.translate(0, bow * 8 - tall * 9);
+    if (bibStyle === 'fluffy') {
+      g.translate(4, -34); g.scale(puff + fluff * .08, puff + fluff * .08); g.translate(-4, 34);
+      within(g, ruff, col.bib, () => { shape(g, 'M-8 -30 Q-4 -24 2 -27 M8 -25 Q13 -21 18 -25', null, tintOf(col.bib, .5)); });
+    } else within(g, chest, col.bib, null, null);
+    g.restore();
+    if (tall >= .3) for (const [px, far] of [[10, true], [23, false]]) {   // paws up in front of its chest
+      g.save(); g.translate(px, -31 - tall * 9); g.rotate(far ? .25 : -.2);
+      g.lineWidth = 2.8; oval(g, 0, 0, 6, 7.5, far ? shade(col.bib, -.08) : col.bib, outline);
+      g.lineWidth = 1.6; shape(g, 'M-2 6 L-2 3 M2 6 L2 3', null, detail(col.bib)); g.restore();
+    }
+
+    // the head
+    g.save();
+    g.translate(6, -44); g.translate(bow * 7 + nod * 3, bow * 19 - tall * 13 - gaze * 3 + nod * 11); g.rotate(tilt + look * .05 - gaze * .3 - bow * .05); g.translate(-6, 44);
+    const ears = () => {
+      if (earStyle === 'pointed') {
+        g.save(); g.translate(-12, -74); g.rotate(-perk * .12 + bow * .1); g.scale(1, 1 + perk * .1); g.translate(12, 74);
+        within(g, earL, col.ear, () => shape(g, innerL, mix(col.ear, '#F6A9A6', .62), null)); g.restore();
+        g.save(); g.translate(26, -74); g.rotate(perk * .12); g.scale(1, 1 + perk * .1); g.translate(-26, 74);
+        within(g, earR, col.ear, () => shape(g, innerR, mix(col.ear, '#F6A9A6', .62), null)); g.restore();
+      }
+    };
+    ears();
+    within(g, head, col.coat, () => {
+      marks(g, col, true);
+      if (maskStyle === 'mask') shape(g, 'M-26 -69 Q-8 -77 8 -69 Q22 -77 40 -68 L40 -56 Q24 -52 9 -57 Q-8 -52 -26 -56Z', col.mask, null);
+      if (maskStyle === 'patch') oval(g, 22, -62, 12.5, 13.5, col.mask);
+      if (maskStyle === 'blaze') shape(g, 'M4 -90 Q10 -92 15 -90 Q17 -70 22 -60 L-4 -60 Q3 -70 4 -90Z', col.mask, null);
+      shape(g, 'M-17 -70 Q-13 -80 -3 -82', null, 'rgba(255,255,255,.4)');
+    });
+    if (earStyle === 'floppy') {
+      g.save(); g.translate(-10, -80); g.rotate(-perk * .3 - hop * .03); g.translate(10, 80); shape(g, flopL, col.ear); g.restore();
+      g.save(); g.translate(24, -81); g.rotate(perk * .3 + hop * .03); g.translate(-24, 81); shape(g, flopR, col.ear); g.restore();
+    }
+    // an open mouth sits under the muzzle, so it is drawn first
+    const open = Math.max(pant, ball * .9, lick * .5);
+    const muzzleCol = maskStyle === 'patch' || maskStyle === 'mask' ? col.bib : col.mask;
+    if (open > .05) {
+      g.save(); g.translate(9, -44);
+      shape(g, `M-9 0 Q0 ${6 + open * 11} 9 0Z`, '#7A3340');
+      if (!ball) {
+        g.save(); g.clip(path(`M-9 0 Q0 ${6 + open * 11} 9 0Z`));
+        oval(g, 1, 2 + open * 8.5, 5.4, 4 + open * 3.5, '#F58A9B', outline); g.restore();
+      }
+      g.restore();
+      if (pant > .55 && !ball) {
+        g.lineWidth = 2.4; shape(g, `M6 -40 Q5 ${-31 + pant * 2} 10 ${-30 + pant * 3} Q15 ${-31 + pant * 2} 14 -40Z`, '#F58A9B');
+        g.lineWidth = 1.4; shape(g, `M10 -39 L10 ${-33 + pant * 2}`, null, '#D96A7E'); g.lineWidth = 3.3;
+      }
+    }
+    shape(g, muzzle, muzzleCol, null);
+    g.lineWidth = 2.1;
+    const line = detail(muzzleCol);
+    oval(g, 9, -56, 5.2, 3.9, '#3A2F3B', null); oval(g, 7.6, -57.2, 1.7, 1, 'rgba(255,255,255,.75)');
+    shape(g, 'M9 -52 L9 -48 M9 -48 Q4 -43 -1 -47 M9 -48 Q14 -43 19 -47', null, line);
+    if (ball > .05) { g.lineWidth = 2.6; oval(g, 9, -38, 9, 9, '#EF5D50', outline); shape(g, 'M1 -41 Q9 -35 17 -41', null, '#FFF3DF'); oval(g, 5.5, -42.5, 2, 1.4, 'rgba(255,255,255,.7)'); g.lineWidth = 2.1; }
+    if (lick > .05) { g.lineWidth = 2; shape(g, `M5 -46 Q${9 + lick * 6} ${-44 - lick * 12} ${13 + lick * 3} -47Z`, '#F58A9B'); }
+    const lineE = detail(maskStyle === 'mask' ? col.mask : col.coat);
+    g.lineWidth = 2.1;
+    const o = { blink, happy, wide, look, gaze, light, iris: col.eyes, line: lineE };
+    eye(g, -6, -63, 5.6, o); eye(g, 22, -63, 5.4, { ...o, line: detail(maskStyle === 'mask' || maskStyle === 'patch' ? col.mask : col.coat) });
+    if (happy > .5 || pant > .3) { blush(g, -14, -54, 4.4, .42 + hot * .3); blush(g, 31, -54, 4.2, .42 + hot * .3); }
+    // two small brows give it a wondering look
+    g.lineWidth = 2.2; shape(g, `M-10 ${-72 - wide * 2 - perk} Q-6 ${-74 - wide * 2 - perk} -2 ${-72 - wide * 2}`, null, lineE);
+    shape(g, `M18 ${-72 - wide * 2} Q22 ${-74 - wide * 2 - perk} 26 ${-72 - wide * 2 - perk}`, null, o.line);
+    g.restore();
+    g.restore();
+  }
+
+  // What it does: its own answer to a tap, to each snack, and what it gets up to when left alone.
+  function act({ age, u, a, reaction, rise, look, gaze, colors, moving }) {
+    const idle = age % 26;
+    const pose = { look, gaze, blink: beat(age % 4.3, 3.9, 4.12), step: rise * .9, hop: rise * 9, wag: Math.sin(age * 5.2) * .08 + rise * .1, perk: rise * .5, squash: -rise * .4 };
+    let col = colors;
+    switch (reaction) {
+      case 'pet':
+        pose.wag = Math.sin(u * TAU * 7) * .34 * a; pose.happy = beat(u, .08, .86); pose.pant = a * .8; pose.perk = a; pose.tilt = Math.sin(u * TAU * 1.5) * .07 * a;
+        pose.hop = Math.max(pose.hop, Math.abs(Math.sin(u * Math.PI * 4)) * 4 * a); break;
+      case 'fire':   // too warm: it pants, tongue right out
+        pose.pant = a; pose.blink = .6 * a; pose.squash = .5 * a; pose.perk = -a; pose.wag = 0; pose.hot = a; break;
+      case 'glow':   // the head tilts one way, then the other, at the little light
+        pose.light = smoothstep(0, .26, u) * (1 - smoothstep(.62, 1, u)); pose.wide = a; pose.perk = a;
+        pose.tilt = Math.sin(u * TAU * 1.25) * .26 * a; pose.gaze = a * .5; pose.look = Math.sin(u * TAU * 1.25) * a; break;
+      case 'float':  // sits up and begs after her
+        pose.tall = smoothstep(.04, .3, u) * (1 - smoothstep(.72, .95, u)); pose.gaze = pose.tall; pose.wag = Math.sin(u * TAU * 5) * .2 * a; pose.wide = a * .6; break;
+      case 'giant':  // looks up, up, ears back
+        pose.gaze = a; pose.perk = -a * .8; pose.wide = a; pose.squash = .35 * a; pose.wag = 0; break;
+      case 'tiny':   // a play bow, tail going
+        pose.bow = smoothstep(.04, .24, u) * (1 - smoothstep(.74, .96, u)); pose.wag = Math.sin(u * TAU * 8) * .36 * a; pose.gaze = -.2 * a; pose.pant = a * .5; pose.perk = a; break;
+      case 'rainbow': {
+        const tint = (k, i) => mix(colors[k], hslToHex(u * 1.8 + i * .27, .87, .66), a);
+        col = { ...colors, bib: tint('bib', 0), tail: tint('tail', 1), mask: tint('mask', 2), ear: tint('ear', 2) };
+        pose.wide = a; pose.wag = Math.sin(u * TAU * 4) * .2 * a; break;
+      }
+      case 'ice':    // fluffs right up and shivers
+        pose.fluff = a * 1.3; pose.shiver = Math.sin(u * TAU * 10) * 3 * a; pose.blink = .85 * beat(u, .17, .93); pose.squash = .3 * a; pose.wag = 0; break;
+      case 'bouncy':
+        pose.hop = Math.max(pose.hop, Math.abs(Math.sin(u * Math.PI * 3)) * a * 15); pose.perk = Math.sin(u * Math.PI * 6) * a; pose.pant = a * .7; pose.happy = a > .5 ? 1 : 0;
+        pose.squash = -.3 * Math.abs(Math.sin(u * Math.PI * 3)) * a; break;
+      case 'play':   // the ball came by: a butt of the nose, tail going
+        pose.nod = beat(u, 0, .3) * .7; pose.hop = Math.max(pose.hop || 0, beat(u, .02, .42) * 13); pose.wag = Math.sin(u * TAU * 8) * .34 * a; pose.perk = a; pose.pant = a * .7; pose.wide = a * .5; break;
+      case 'sleep':  // settles low, chin on its chest
+        pose.squash = a; pose.nod = a; pose.blink = a > .4 ? 1 : pose.blink; pose.perk = -a; pose.wag = 0; pose.look = look * (1 - a); break;
+      default:
+        if (!moving) {
+          // its own ball: up it comes, a toss, a catch, and a proud wag
+          const b = beat(idle, 15.5, 20.5);
+          if (b > 0) {
+            const toss = beat(idle, 17.3, 18.5);
+            pose.ball = toss > .05 ? 0 : 1; pose.toss = toss; pose.gaze = toss * .8; pose.wag = Math.sin(idle * 14) * .26; pose.perk = .6;
+            pose.tilt = toss ? 0 : Math.sin(idle * 3.1) * .05;
+          }
+          const t = beat(idle, 6, 8.2);      // a tilt of the head, wondering
+          if (t > 0) { pose.tilt = .24 * smoothstep(0, .5, t); pose.perk = t; pose.wide = t * .6; }
+          const l = beat(idle, 10.6, 11.5);  // licks its nose
+          if (l > 0) pose.lick = l;
+        }
+    }
+    return { pose, col };
+  }
+  // its own ball, when it is in the air (drawn by whoever draws the pet, over it)
+  function prop(g, x, y, s, pose) {
+    if (!pose.toss || pose.toss < .05) return;
+    const d = pose.dir || 1;
+    g.save(); g.translate(x + d * s * 9, y - s * (41 + pose.toss * 62)); g.scale(s, s); g.rotate(pose.toss * 5);
+    g.lineWidth = 2.6; oval(g, 0, 0, 8.5, 8.5, '#EF5D50', outline); shape(g, 'M-7 -3 Q0 2 7 -3', null, '#FFF3DF');
+    g.restore();
+  }
+
+  return {
+    name: 'Puppy', defaults, regions, styles, paint, act, prop, cost: 8, eye: 'round',
+    alone: [['tilt', 7.1], ['lick', 11.05], ['ball', 16.6], ['toss', 17.9], ['caught', 19.4]],
+    looks: [
+      {},
+      { coat: '#F2B66C', marks: '#F2B66C', bib: '#FFF6E4', mask: '#FFF6E4', ear: '#C97B3A', tail: '#F2B66C', designs: { marks: 'plain', bib: 'smooth', mask: 'blaze', ear: 'floppy', tail: 'whip' } },
+      { coat: '#FFFDF5', marks: '#3A3340', bib: '#FFFDF5', mask: '#3A3340', ear: '#3A3340', tail: '#FFFDF5', eyes: '#4F86C6', designs: { marks: 'spots', bib: 'smooth', mask: 'patch', ear: 'floppy', tail: 'whip' } },
+      { coat: '#8A5A3C', marks: '#3A3340', bib: '#F3D9B1', mask: '#F3D9B1', ear: '#5B3A28', tail: '#8A5A3C', designs: { marks: 'patches', bib: 'fluffy', mask: 'muzzle', ear: 'pointed', tail: 'plume' } },
+      { coat: INK, marks: INK, bib: INK, mask: INK, ear: INK, tail: INK, eyes: INK, designs: { marks: 'plain' } },
+      { coat: PALETTE[9], marks: PALETTE[9], bib: PALETTE[9], mask: PALETTE[9], ear: PALETTE[9], tail: PALETTE[9], eyes: PALETTE[9], designs: { marks: 'spots', ear: 'floppy' } },
+      { coat: PALETTE[7], marks: PALETTE[8], bib: PALETTE[5], mask: PALETTE[2], ear: PALETTE[3], tail: PALETTE[1], eyes: PALETTE[4], designs: { marks: 'spots', mask: 'patch', tail: 'plume' } },
+    ],
+    // room to keep clear on its board: ahead, behind, behind its head, up, up when it stretches, the top of its tail, and where its head begins
+    box: { front: 60, back: 80, head: 44, top: 112, tall: 128, low: 92, neck: 40 },
+    reach: 124, view: [60, 99, .82], card: [97, 150, 1.2], thumb: [37, .43], head: [8, 78], pitch: -4,
+    hit: (x, y) => (x > -62 && x < 30 && y > -54 && y < 5) || (x > -27 && x < 42 && y > -96 && y < -36),
+    gait: { stride: 34, lift: 10, speed: 230 }, shadow: [-8, 40],
+  };
+})();
+
+// ===== pet.js =====
+// Pets: who she has, which one is out, and the life it lives beside her doodling.
+// The kitten is drawn here, in units of one pixel on its drawing board, feet at y=0. The other kinds are in src/pets/.
+const Pet = (() => {
+  const { outline, path, shape, oval, texture, detail, beat } = PetArt;
+  const calico = Object.freeze({
+    coat: '#F4CF9D', patchA: '#EA8B48', patchB: '#584450', bib: '#FFF9EA',
+    ear: '#EFA69F', tip: '#584450', eyes: '#83B858', pattern: 'patches',
+  });
+  const patterns = ['plain', 'patches', 'stripes', 'spots'];
+
+  const back = 'M-36 -3 Q-47 -10 -44 -26 Q-41 -42 -22 -43 C-11 -44 0 -39 9 -38 Q29 -38 35 -20 Q40 -8 27 -4 Q13 0 -36 -3Z';
+  const head = 'M-22 -45 Q-28 -59 -25 -72 Q-24 -77 -19 -74 Q-10 -69 -5 -61 Q5 -63 15 -60 Q22 -70 30 -71 Q35 -72 34 -64 L33 -49 Q42 -42 40 -33 Q37 -20 17 -18 Q-3 -16 -17 -25 Q-29 -33 -22 -45Z';
+  const tail = 'M-31 -12 C-52 -5 -65 -14 -66 -29 Q-68 -43 -58 -49 Q-52 -52 -48 -48 Q-44 -44 -49 -39 C-58 -27 -49 -20 -34 -26 Q-25 -27 -25 -19 Q-25 -14 -31 -12Z';
+  const bib = 'M7 -32 Q19 -37 28 -27 Q34 -22 30 -14 Q26 -6 15 -6 Q12 -1 5 0 L-2 0 Q-10 -2 -6 -10 Q-3 -16 0 -23 Q2 -29 7 -32Z';
+  const paw = 'M-8 0 Q-11 -2 -9 -7 Q-6 -12 2 -11 Q10 -10 10 -4 Q10 0 5 0Z';
+  const rear = 'M-33 -3 Q-38 -11 -32 -21 Q-26 -29 -17 -25 Q-8 -21 -10 -12 Q-6 -10 -7 -5 Q-8 0 -15 0 L-28 0 Q-33 0 -33 -3Z';
+  const muzzle = 'M-8 -32 Q-4 -40 6 -37 Q13 -41 21 -38 Q30 -38 34 -32 Q34 -22 19 -21 Q8 -19 -2 -23 Q-10 -26 -8 -32Z';
 
   function painted(g, d, key, col, bounds, stroke = outline) {
     shape(g, d, col[key], null);
@@ -7712,9 +8438,7 @@ const Pet = (() => {
     g.restore();
   }
 
-  function detail(color) { return hexToHsl(color)[2] < .28 ? mix(color, '#E0BBC0', .45) : outline; }
-
-  function paint(g, x, y, s, col = calico, pose = {}) {
+  function paintKitten(g, x, y, s, col = calico, pose = {}) {
     const { dir = 1, arch = 0, wash = 0, roll = 0, step = 0, look = 0, blink = 0,
       crouch = 0, gaze = 0, tailSwish = 0, stretch = 0, bat = 0, fluff = 0, light = 0, hop = 0, shiver = 0, reach = 0, tall = 0, tuck = 0, eyesWide = 0 } = pose;
     const lowered = crouch * 9 + roll * 17 + tuck * 9;
@@ -7822,66 +8546,11 @@ const Pet = (() => {
     g.restore();
   }
 
-  const key = 'doodlings.kitten.v1';
-  const regions = [
-    ['coat', 'Coat'], ['patchA', 'First patches'], ['patchB', 'Second patches'],
-    ['bib', 'Chest and paws'], ['ear', 'Ears'], ['tip', 'Tail tip'], ['eyes', 'Eyes'],
-  ];
-  const preview = new URLSearchParams(location.search).get('kitten') === '1';
-  let owned = false, colors = { ...calico };
-  try {
-    const saved = JSON.parse(localStorage.getItem(key));
-    if (saved && typeof saved === 'object') {
-      owned = saved.owned === true;
-      const col = saved.colors;
-      if (col && regions.every(([k]) => typeof col[k] === 'string' && /^(#[0-9a-f]{6})$/i.test(col[k])) && patterns.includes(col.pattern)) {
-        colors = Object.fromEntries(regions.map(([k]) => [k, col[k].toUpperCase()]));
-        colors.pattern = col.pattern;
-        colors.designs = Object.fromEntries(regions.filter(([k]) => k !== 'coat' && patterns.includes(col.designs?.[k]))
-          .map(([k]) => [k, col.designs[k]]));
-      }
-    }
-  } catch (_) { /* a damaged save starts with the calico */ }
-
-  function save() {
-    try { localStorage.setItem(key, JSON.stringify({ owned, colors })); } catch (_) { /* play on this page without storage */ }
-  }
-  const hasKitten = () => owned || !!App.purse?.own.includes('kitten');
-  function adopt() {
-    if (hasKitten()) return false;
-    owned = true; save();
-    return true;
-  }
-  const available = () => hasKitten() || preview;
-
-  let cat, brush, editor;
-  function enter(root) {
-    leave();
-    cat = { root, x: null, y: null, s: 0, face: 1, age: 0, pounce: null, rise: 0, rest: 0,
-      reaction: null, elapsed: 0, brush: false, visible: false, side: 0, pose: {}, alpha: 1 };
-  }
-  function leave() {
-    if (editor && editor.open) editor.close();
-    if (brush) brush.remove();
-    if (editor) editor.remove();
-    cat = brush = editor = null;
-  }
-  function answer(kind) {
-    if (!cat || !available()) return;
-    if (cat.reaction === kind && cat.elapsed < .23) return false;
-    cat.reaction = kind; cat.elapsed = 0; cat.age = 0;
-    return true;
-  }
-  const expectMushroom = (on) => { if (cat) cat.mushroom = on; };
-  const beat = (u, a, b) => Math.sin(Math.PI * clamp01((u - a) / (b - a)));
-  function action(to) {
-    const { age, elapsed, reaction, face, rise } = cat;
-    const u = elapsed / 2.1, a = beat(u, .02, .89);
+  // What the kitten does: its answer to a tap, to each snack, and what it gets up to alone.
+  function actKitten({ age, u, a, reaction, rise, look, gaze, colors, moving }) {
     const idle = age % 24;
     const pose = {
-      dir: face, step: rise * .9, hop: rise * 8,
-      look: clamp((to.x - cat.x) / 80, -1, 1) * face,
-      gaze: .24 * clamp01((cat.y - to.y - 22) / 150),
+      step: rise * .9, hop: rise * 8, look, gaze,
       blink: beat(age % 4.7, 3.85, 4.08),
       tailSwish: rise * .11, crouch: rise * .5, arch: rise * .16,
     };
@@ -7923,8 +8592,12 @@ const Pet = (() => {
       case 'bouncy':
         pose.hop = Math.max(pose.hop, Math.abs(Math.sin(u * Math.PI * 3)) * a * 13);
         pose.arch += .17 * a; break;
+      case 'play':   // the ball came by: a bat at it
+        pose.bat = beat(u, 0, .5); pose.gaze = -.2 * a; pose.eyesWide = a; pose.tailSwish += .2 * Math.sin(u * TAU * 4) * a; break;
+      case 'sleep':  // curled low, eyes shut, for as long as her doodling sleeps
+        pose.crouch = a; pose.tuck = a; pose.blink = a > .4 ? 1 : pose.blink; pose.gaze *= 1 - a; pose.look *= 1 - a; break;
       default:
-        if (!cat.pounce) {
+        if (!moving) {
           pose.wash = beat(idle, 5.5, 8.4) * (.68 + .32 * Math.sin(idle * 13) ** 2);
           pose.roll = beat(idle, 14, 17.2);
         }
@@ -7932,20 +8605,149 @@ const Pet = (() => {
     return { pose, col };
   }
 
+  // The kitten's first home on the device. Every later kind is kept beside it under the same key,
+  // so a family that is kept and brought back carries them all, and a toy from before them still reads its kitten.
+  const key = 'doodlings.kitten.v1';
+  const kinds = PetArt.kinds;
+  kinds.kitten = {
+    name: 'Kitten', defaults: calico, paint: paintKitten, act: actKitten, cost: 8,
+    regions: [
+      ['coat', 'Coat'], ['patchA', 'First patches'], ['patchB', 'Second patches'],
+      ['bib', 'Chest and paws'], ['ear', 'Ears'], ['tip', 'Tail tip'], ['eyes', 'Eyes'],
+    ],
+    box: { front: 62, back: 79, head: 42, top: 98, tall: 112, low: 72, neck: 40 },
+    hit: (x, y) => (x > -72 && x < 46 && y > -66 && y < 5) || (x > -25 && x < 36 && y > -83 && y < -55),
+    gait: { stride: 32, lift: 8, speed: 214 }, shadow: [-10, 45], reach: 124,
+    view: [60, 93, .86], card: [99, 138, 1.22], thumb: [36, .45], head: [8, 62], pitch: 0,
+  };
+  // the order they stand in on the shelf and in her basket
+  const ORDER = ['kitten', 'puppy', 'bird', 'hedgehog'].filter((k) => kinds[k]);
+  const fresh = (k) => ({ ...kinds[k].defaults, designs: { ...kinds[k].defaults.designs } });
+  const query = new URLSearchParams(location.search);
+  // ?kitten=1 or ?pet=puppy shows one without her having it: for the look tools
+  const previewKind = query.get('kitten') === '1' ? 'kitten' : ORDER.includes(query.get('pet')) ? query.get('pet') : null;
+  const preview = !!previewKind;
+  const kept = Object.fromEntries(ORDER.map((k) => [k, { owned: false, colors: fresh(k) }]));
+  let out = null, met = [], metKnown = false;
+  const hex = (v) => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
+  // colours come from outside: keep them only when every part is a colour and every style is one this kind has
+  function cleanColors(k, col) {
+    const K = kinds[k];
+    if (!col || typeof col !== 'object') return null;
+    // each part by itself: one that is missing or damaged comes as that kind comes, and the rest stay as she painted them
+    const c = Object.fromEntries(K.regions.map(([r]) => [r, hex(col[r]) ? col[r].toUpperCase() : K.defaults[r]]));
+    if (k === 'kitten') {
+      c.pattern = patterns.includes(col.pattern) ? col.pattern : K.defaults.pattern;
+      c.designs = Object.fromEntries(K.regions.filter(([r]) => r !== 'coat' && patterns.includes(col.designs?.[r])).map(([r]) => [r, col.designs[r]]));
+    } else {
+      c.designs = { ...K.defaults.designs };
+      for (const [r, list] of Object.entries(K.styles)) if (list.includes(col.designs?.[r])) c.designs[r] = col.designs[r];
+    }
+    return c;
+  }
+  // read again when a family is brought back: a pet that came with it keeps her colours (Brad, 2026-11-18, Build W45)
+  function load() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(key));
+      if (!saved || typeof saved !== 'object') return;
+      for (const k of ORDER) {
+        const from = k === 'kitten' ? saved : saved.pets?.[k];
+        if (!from || typeof from !== 'object') continue;
+        kept[k].owned = kept[k].owned || from.owned === true;
+        const col = cleanColors(k, from.colors);
+        // in place: a painter that is open goes on painting the colours that are saved
+        if (col) { const mine = kept[k].colors; for (const part of Object.keys(mine)) delete mine[part]; Object.assign(mine, col); }
+      }
+      if (ORDER.includes(saved.out)) out = saved.out;
+      if (Array.isArray(saved.met)) { met = [...new Set([...met, ...saved.met.filter((k) => ORDER.includes(k))])]; metKnown = true; }
+    } catch (_) { /* a damaged save starts with each kind as it comes */ }
+  }
+  load();
+  // A save from before the others never wrote down who had come home. Whoever she has then has been home
+  // a long time already and does not arrive again. Asked once, before the next one is adopted or comes out.
+  function settle() {
+    if (metKnown) return;
+    metKnown = true;
+    for (const k of ORDER) if (has(k) && !met.includes(k)) met.push(k);
+  }
+
+  // for the tests: a colour tapped, saved as the tap saves it (test/keep-place.mjs)
+  window.__kitten = { colour: (k, col) => { kept.kitten.colors[k] = col; save(); }, state: () => JSON.parse(JSON.stringify({ owned: kept.kitten.owned, colors: kept.kitten.colors })) };
+  function save() {
+    try {
+      localStorage.setItem(key, JSON.stringify({ owned: kept.kitten.owned, colors: kept.kitten.colors,
+        pets: Object.fromEntries(ORDER.filter((k) => k !== 'kitten').map((k) => [k, kept[k]])), out, met }));
+    } catch (_) { /* play on this page without storage */ }
+  }
+  const has = (k) => !!kept[k] && (kept[k].owned || !!App.purse?.own.includes(k));
+  const mine = () => ORDER.filter(has);
+  const hasKitten = () => has('kitten');
+  function adopt(k = 'kitten') {
+    if (!kept[k] || has(k)) return false;
+    settle();
+    kept[k].owned = true; out = k; save();
+    return true;
+  }
+  const available = () => preview || ORDER.some(has);
+  // the one that is out with her: the one she chose last, or the first she has
+  const current = () => previewKind || (out && has(out) ? out : mine()[0]) || 'kitten';
+  const colorsOf = (k) => kept[k].colors;
+
+  let cat, brush, swap, editor, picker;
+  function enter(root, how) {
+    leave();
+    settle();
+    const kind = current(), K = kinds[kind];
+    cat = { root, kind, K, x: null, y: null, s: 0, face: 1, age: 0, pounce: null, rise: 0, rest: 0,
+      reaction: null, elapsed: 0, brush: false, visible: false, side: 0, pose: {}, alpha: 1, pop: 1, sleep: 0, zzz: 0, played: 0, bop: 0 };
+    // the first time one comes home, and whenever she calls another out, it arrives with a little show
+    if (!preview && has(kind) && !met.includes(kind)) cat.arrive = 'new';
+    else if (how) cat.arrive = how;
+  }
+  function leave() {
+    for (const d of [editor, picker]) if (d) { if (d.open) d.close(); d.remove(); }
+    for (const b of [brush, swap]) if (b) b.remove();
+    cat = brush = swap = editor = picker = null;
+  }
+  function answer(kind) {
+    if (!cat || !available()) return;
+    if (cat.reaction === kind && cat.elapsed < .23) return false;
+    cat.reaction = kind; cat.elapsed = 0; cat.age = 0;
+    return true;
+  }
+  const expectMushroom = (on) => { if (cat) cat.mushroom = on; };
+  // a beat of her show: whoever is out and awake bops to it
+  const beatNow = () => { if (cat?.visible && !cat.pounce && cat.sleep < .3) cat.bop = 1; };
+  function action(to) {
+    const { age, elapsed, face, rise, K } = cat;
+    const asleep = cat.sleep > 0 && !cat.reaction && !cat.pounce;
+    const u = elapsed / 2.1, a = asleep ? cat.sleep : beat(u, .02, .89);
+    const r = K.act({ age, u, a, reaction: asleep ? 'sleep' : cat.reaction, rise,
+      look: clamp((to.x - cat.x) / 80, -1, 1) * face, gaze: .24 * clamp01((cat.y - to.y - 22) / 150),
+      colors: colorsOf(cat.kind), moving: !!cat.pounce });
+    r.pose.dir = face;
+    return r;
+  }
+
   // Put the kitten on the same ground as the toy box. When her line fills up, the grass in
   // front is another place to stand. Only move into a gap large enough for the tail and ears.
   const rect = (x, y, w, h) => ({ minX: x - w, maxX: x + w, minY: y - h, maxY: y + h });
   const hits = (a, b, air = 0) =>
     a.minX < b.maxX + air && a.maxX > b.minX - air && a.minY < b.maxY + air && a.maxY > b.minY - air;
-  const boxAt = (x, y, s, dir) => ({
-    minX: x - (dir === 1 ? 79 : 62) * s, maxX: x + (dir === 1 ? 62 : 79) * s, minY: y - (cat?.reaction === 'giant' || cat?.mushroom ? 112 : 98) * s, maxY: y + 6 * s,
-  });
+  const reachUp = () => { const b = cat.K.box; return cat.reaction === 'giant' || cat.mushroom ? b.tall : b.top; };
+  const boxAt = (x, y, s, dir) => {
+    const b = cat.K.box;
+    return { minX: x - (dir === 1 ? b.back : b.front) * s, maxX: x + (dir === 1 ? b.front : b.back) * s, minY: y - reachUp() * s, maxY: y + 6 * s };
+  };
   // The tail and rump are low. The narrower part above them is just the head
   // and, on the star's turn, the light it is watching.
-  const silhouette = (s, dir) => [
-    { minX: (dir === 1 ? -42 : -62) * s, maxX: (dir === 1 ? 62 : 42) * s, minY: -(cat?.reaction === 'giant' || cat?.mushroom ? 112 : 98) * s, maxY: -40 * s },
-    { minX: (dir === 1 ? -79 : -62) * s, maxX: (dir === 1 ? 62 : 79) * s, minY: -72 * s, maxY: 6 * s },
-  ];
+  const silhouette = (s, dir) => {
+    const b = cat.K.box;
+    return [
+      { minX: (dir === 1 ? -b.head : -b.front) * s, maxX: (dir === 1 ? b.front : b.head) * s, minY: -reachUp() * s, maxY: -b.neck * s },
+      { minX: (dir === 1 ? -b.back : -b.front) * s, maxX: (dir === 1 ? b.front : b.back) * s, minY: -b.low * s, maxY: 6 * s },
+    ];
+  };
   const translated = (b, x, y) => ({ minX: b.minX + x, maxX: b.maxX + x, minY: b.minY + y, maxY: b.maxY + y });
   const collides = (zones, x, y, obstacles, pad) =>
     zones.some(b => obstacles.some(o => hits(translated(b, x, y), o, pad)));
@@ -7972,7 +8774,7 @@ const Pet = (() => {
   // foreground as the box. The dock and the snack tray keep their space.
   function footholds(W, floor, bottom, ground, fixed, faces, scenery, soon, focus, refresh) {
     const { s, x: lastX, y: lastY, side: lastSide } = cat;
-    const edge = 79 * s + 4; // leave the tail room to turn on either side
+    const edge = cat.K.box.back * s + 4; // leave the tail room to turn on either side
     const rows = [floor, bottom, ground];
     if (lastY >= floor && lastY <= bottom) rows.push(lastY);
     for (let y = floor + 5; y < bottom; y += 5) rows.push(y);
@@ -7986,7 +8788,7 @@ const Pet = (() => {
         const left = Math.max(edge, side > 0 ? focus.x + 1 : 0);
         const right = Math.min(W - edge, side < 0 ? focus.x - 1 : W);
         if (left > right) continue;
-        const want = focus.x + side * 124 * s;
+        const want = focus.x + side * cat.K.reach * s;
         for (const y of rows) {
           let free = [[left, right]];
           for (const z of zones) for (const o of clearOf) {
@@ -8074,16 +8876,16 @@ const Pet = (() => {
   // The frog's hop: interpolate between two footfalls and put a sine arc above
   // that line. Like a friend, pick the next footfall to one side of the doodling.
   const MAX_POUNCE_STEP = 4;
-  const stride = 32;
   function startPounce(tx, ty, s, clear, soon) {
     const { x, y, face } = cat;
     const distance = hypot(tx - x, ty - y);
     if (distance < 3) return null;
+    const { stride, lift, speed } = cat.K.gait;
     const k = Math.min(1, stride / distance);
     const dx = (tx - x) * k, dy = (ty - y) * k;
     const dir = Math.abs(dx) < .8 ? face : Math.sign(dx);
-    const height = Math.min(8 * s, hypot(dx, dy) * .24, dy > 0 ? dy / Math.PI * .8 : Infinity);
-    const dur = Math.max(.13, hypot(dx, Math.abs(dy) + Math.PI * height) / 214);
+    const height = Math.min(lift * s, hypot(dx, dy) * .24, dy > 0 ? dy / Math.PI * .8 : Infinity);
+    const dur = Math.max(.13, hypot(dx, Math.abs(dy) + Math.PI * height) / speed);
     const hop = { x, y, dx, dy, dir, height, dur, t: 0 };
     for (const u of [0, .25, .5, .75, 1]) {
       const px = x + dx * u, py = y + dy * u, lift = Math.sin(Math.PI * u) * height;
@@ -8128,7 +8930,7 @@ const Pet = (() => {
     cat.visible = false;
     if (hidden) {
       cat.alpha = 0;
-      if (brush) brush.style.display = 'none';
+      hideButtons();
       return;
     }
     const [fx, fy] = c.facePos(), focus = { x: fx, y: fy };
@@ -8159,7 +8961,6 @@ const Pet = (() => {
       const w = flight.what === 'mousehouse' ? 1.4 : 1.1;
       soon.push({ minX: x - size * w, maxX: x + size * w, minY: y - size * 1.8, maxY: y + size * .6 });
     }
-    if (toy && Math.abs(toy.vx) > 50) soon.push(rect(toy.x + toy.vx * .19, toy.y, toy.r + 9, toy.r + 9));
     const boxEdges = box && { minX: box.box.minX - size * .07, maxX: box.box.maxX + size * .07,
       minY: box.box.minY - size * .1, maxY: box.box.maxY + size * .20 };
     const furniture = [...room, ...marks.filter(m => !m.flat).map(m => ({ minX: m.x0, maxX: m.x1, minY: m.y0, maxY: m.y1 }))];
@@ -8171,7 +8972,7 @@ const Pet = (() => {
     const boxes = boxEdges ? [boxEdges] : [];
     const tray = snackSpace(W, H);
     const fixed = [...ui, ...boxes, ...(tray ? [tray] : [])];
-    cat.clearance = [...ui, ...boxes, ...faces, ...scenery];
+    cat.clearance = [...ui, ...boxes, ...faces, ...scenery]; cat.fixed = fixed;
     const dockY = Math.min(...ui.filter(b => b.dock).map(b => b.minY), H - 4);
     const bottom = Math.max(floor, dockY - 6 * cat.s - 6);
     const ground = Math.min(bottom, floor + 76 * cat.s);
@@ -8180,12 +8981,17 @@ const Pet = (() => {
     const best = spots[0];
     cat.age += dt;
     cat.rest = Math.max(0, cat.rest - dt);
+    cat.played = Math.max(0, cat.played - dt);
+    cat.pop = Math.min(1, cat.pop + dt / .42);
+    // when her doodling sleeps, so does it
+    cat.sleep = clamp01(cat.sleep + (c.asleep ? dt * .9 : -dt * 2.6));
     if (cat.reaction) {
       cat.elapsed += dt;
       if (cat.elapsed >= 2.1 && !cat.pounce) { cat.reaction = null; cat.rest = .32; }
     }
 
-    const inBand = (x, y, s) => x >= 79 * s + 3 && x <= W - 79 * s - 3 && y >= floor - 8 * s && y <= bottom;
+    const reach = cat.K.box.back;
+    const inBand = (x, y, s) => x >= reach * s + 3 && x <= W - reach * s - 3 && y >= floor - 8 * s && y <= bottom;
     const front = [...fixed, ...faces];
     const blocks = crowded ? front : [...front, ...scenery];
     const free = (obstacles, x, y, s, dir) => inBand(x, y, s) &&
@@ -8205,8 +9011,8 @@ const Pet = (() => {
 
     if (refresh) {
       cat.face = best?.dir ?? cat.face;
-      const edge = 79 * cat.s + 4;
-      cat.x = best?.x ?? clamp(c.x + 124 * cat.s * (cat.side || 1), edge, W - edge);
+      const edge = reach * cat.s + 4;
+      cat.x = best?.x ?? clamp(c.x + cat.K.reach * cat.s * (cat.side || 1), edge, W - edge);
       cat.y = best?.y ?? ground;
     } else {
       if (!cat.pounce) travelTo(spots, clear, strict, clearFront, soon, bottom);
@@ -8217,7 +9023,7 @@ const Pet = (() => {
         const x = p.x + p.dx * u, y = p.y + p.dy * u;
         const footing = p.front && clearFront ? clearFront : clear;
         if (footing(x, y - p.height * rise, cat.s, cat.face)) {
-          cat.x = x; cat.y = y; cat.rise = rise * p.height / (8 * cat.s);
+          cat.x = x; cat.y = y; cat.rise = rise * p.height / (cat.K.gait.lift * cat.s);
         } else {
           // Hold the same footing if a new object intrudes on the next arc.
           cat.pounce = null;
@@ -8228,41 +9034,96 @@ const Pet = (() => {
     }
     cat.visible = true;
     cat.side = cat.x < c.x ? -1 : 1;
-    Object.assign(cat, action(focus));
+    cat.bop = Math.max(0, cat.bop - dt * 3.4);
+    // a ball on the move is the thing to watch
+    Object.assign(cat, action(toy && hypot(toy.vx, toy.vy) > 90 ? toy : focus));
     cat.bounds = boxAt(cat.x, cat.y, cat.s, cat.face);
     cat.zones = silhouette(cat.s, cat.face).map(b => translated(b, cat.x, cat.y));
     cat.gap = Math.min(...cat.zones.flatMap(a => cat.clearance.map(b => Math.max(
       b.minX - a.maxX, a.minX - b.maxX, b.minY - a.maxY, a.minY - b.maxY))));
     // shy (the bus and the places its riders step down to): where she cannot stand clear of them she waits out of sight, and comes out as the bus goes
     const near = (shy || []).some(m => cat.zones.some(z => z.maxX > m.x0 - 2 && z.minX < m.x1 + 2 && z.maxY > m.y0 - 2 && z.minY < m.y1 + 2));
-    if (near) { cat.visible = false; cat.alpha = 0; cat.x = null; if (brush) brush.style.display = 'none'; return; }
+    if (near) { cat.visible = false; cat.alpha = 0; cat.x = null; hideButtons(); return; }
+    if (cat.arrive) arrive();                               // only once it can be seen
+    playBall(toy);
     cat.alpha = Math.min(1, cat.alpha + dt * 3.5);
+    if (cat.sleep > .9 && (cat.zzz -= dt) <= 0) {
+      cat.zzz = 3.1;
+      const [hx, hy] = headAt();
+      App.fx?.emit('zzz', hx + 10 * cat.s, hy - 14 * cat.s, { vy: -36, vx: 12, size: 11, life: 2.2, color: INK, vr: 0 });
+    }
     placeBrush(cat.clearance, W, H);
   }
 
+  const hideButtons = () => { for (const b of [brush, swap]) if (b) b.style.display = 'none'; };
+  // The brush, and beside it the paw that opens her basket when she has more than one pet.
   function placeBrush(blocks, W, H) {
     if (!brush) return;
+    const two = !!swap, half = two ? 46 : 22;
     const b = cat.bounds, { x, y, face, s } = cat;
     const options = [
       [x - face * s * 48, b.minY - 23], [x, b.minY - 23],
-      [face > 0 ? b.minX - 23 : b.maxX + 23, y - s * 36],
-      [face < 0 ? b.minX - 23 : b.maxX + 23, y - s * 36],
+      [face > 0 ? b.minX - half - 1 : b.maxX + half + 1, y - s * 36],
+      [face < 0 ? b.minX - half - 1 : b.maxX + half + 1, y - s * 36],
       [x, y + 27], [x - 35, b.minY - 33], [x + 35, b.minY - 33],
       [x - 40, y + 20], [x + 40, y + 20], [x, b.minY - 53],
     ];
-    const at = options.find(([cx, cy]) => cx > 25 && cx < W - 25 && cy > 25 && cy < H - 25 &&
-      !blocks.some(o => hits(rect(cx, cy, 22, 22), o, 4)));
-    brush.style.display = cat.brush && at && cat.alpha >= .6 && !editor?.open ? '' : 'none';
-    if (at) { brush.style.left = at[0] + 'px'; brush.style.top = at[1] + 'px'; }
+    const free = (list) => options.find(([cx, cy]) => cx > half + 3 && cx < W - half - 3 && cy > 25 && cy < H - 25 &&
+      !list.some(o => hits(rect(cx, cy, half, 22), o, 4)));
+    // clear of everything if it can be; over her doodling rather than not there at all
+    const at = free(blocks) || free(cat.fixed || []);
+    const show = cat.brush && at && cat.alpha >= .6 && !editor?.open && !picker?.open ? '' : 'none';
+    brush.style.display = show;
+    if (swap) swap.style.display = show;
+    if (at) {
+      brush.style.left = at[0] - (two ? 24 : 0) + 'px'; brush.style.top = at[1] + 'px';
+      if (swap) { swap.style.left = at[0] + 24 + 'px'; swap.style.top = at[1] + 'px'; }
+    }
+  }
+
+  const headAt = () => [cat.x + cat.face * cat.K.head[0] * cat.s, cat.y - cat.K.head[1] * cat.s];
+  function hearts(n) {
+    const [hx, hy] = headAt();
+    App.fx?.burst('heart', hx, hy - 8 * cat.s, n, { angle: -Math.PI / 2, spread: .9, speed: 120, size: 12, life: 1.1, color: '#FF6FB5', vr: 0, drag: 1.5 });
+  }
+  // It has just come out: new to her home, or called from her basket.
+  function arrive() {
+    const how = cat.arrive, mid = cat.y - cat.K.box.neck * cat.s;
+    cat.arrive = null; cat.pop = 0; cat.alpha = 1;
+    App.fx?.burst('puff', cat.x, mid, 9, { angle: -Math.PI / 2, spread: 3.1, speed: 150, size: 30 * cat.s, life: .6, color: 'rgba(255,255,255,0.85)', drag: 2.4 });
+    App.fx?.burst('star', cat.x, mid, how === 'new' ? 14 : 6, { speed: 190, size: 13, life: .8, colors: ['#fff', '#FFC928', '#FF6FB5'], drag: 2.8 });
+    if (how === 'new') {
+      App.fx?.burst('confetti', cat.x, mid, 30, { angle: -Math.PI / 2, spread: 1.1, speed: 560, size: 11, life: 2, colors: PALETTE.slice(0, 9), g: 900, drag: 1.4 });
+      Sound.sfx('confetti'); Sound.sfx('learn'); Sound.pet(cat.kind, 'hello', { delay: .45 });
+      if (!met.includes(cat.kind)) { met.push(cat.kind); save(); }
+    } else { Sound.sfx('poof', { gain: .5 }); Sound.pet(cat.kind, 'hello', { delay: .12 }); }
+    if (answer('pet')) hearts(how === 'new' ? 4 : 2);
+  }
+  // The ball came into it: it knocks the ball back the way it came, in its own way.
+  function playBall(toy) {
+    if (!toy || toy.grab || cat.pounce || cat.sleep > .3 || cat.played > 0 || cat.pop < 1) return;
+    const by = cat.y - cat.K.box.neck * .7 * cat.s, R = 30 * cat.s + toy.r;
+    const dx = toy.x - cat.x, dy = toy.y - by, dd = hypot(dx, dy) || 1, speed = hypot(toy.vx, toy.vy);
+    if (dd >= R || speed < 45) return;
+    const dir = dx >= 0 ? 1 : -1;
+    toy.vx = dir * Math.max(300, speed * .9); toy.vy = -Math.max(260, speed * .45);
+    toy.x = cat.x + dx / dd * R;
+    cat.played = 1.1;
+    if (answer('play')) { Sound.sfx('boing', { gain: .3, pitch: 5 + (cat.K.pitch || 0) }); Sound.pet(cat.kind, 'play', { delay: .06 }); }
   }
 
   function draw(g) {
     if (!cat?.visible) return;
-    const { x, y, s, pose, col, alpha } = cat;
+    const { x, y, pose, col, alpha, K } = cat;
+    // it pops out: up from nothing, a little too big, then itself
+    const t = cat.pop, s = cat.s * (t < 1 ? (1 - (1 - t) ** 3) * (1 + .22 * Math.sin(t * Math.PI)) : 1);
     g.save(); g.globalAlpha *= alpha;
-    oval(g, x - 10 * s, y + 1, 45 * s, 5 * s, 'rgba(39,35,49,.16)');
+    // the show's music: down and wide on the beat, and up again
+    if (cat.bop > 0) { const b = Math.sin(cat.bop * Math.PI) * cat.bop; g.translate(x, y); g.scale(1 + b * .07, 1 - b * .1); g.translate(-x, -y); }
+    const off = cat.kind === 'kitten' ? 1 : pose.dir, air = cat.kind === 'kitten' ? 1 : 1 - Math.min(.45, (pose.hop || 0) / 80);
+    oval(g, x + K.shadow[0] * s * off, y + 1, K.shadow[1] * s * air, 5 * s * air, 'rgba(39,35,49,.16)');
     if (pose.light > 0) {
-      const at = x + pose.dir * s * (28 + Math.sin(cat.elapsed * 7) * 22), cy = y - s * (70 + Math.sin(cat.elapsed * 5) * 12);
+      const at = x + pose.dir * s * (28 + Math.sin(cat.elapsed * 7) * 22), cy = y - s * (K.head[1] + 8 + Math.sin(cat.elapsed * 5) * 12);
       g.globalAlpha = alpha * pose.light;
       const flare = g.createRadialGradient(at, cy, 0, at, cy, 13 * s);
       flare.addColorStop(0, '#FFF7AF'); flare.addColorStop(1, 'rgba(255,242,143,0)');
@@ -8270,22 +9131,36 @@ const Pet = (() => {
       oval(g, at, cy, 3 * s, 3 * s, '#FFF9C8');
       g.globalAlpha = alpha;
     }
-    paint(g, x, y, s, col, pose);
+    K.paint(g, x, y, s, col, pose);
+    if (K.prop) K.prop(g, x, y, s, pose);
     g.restore();
   }
   function hit(p) {
-    if (!cat?.visible || cat.alpha < .6 || editor?.open) return false;
-    const x = (p.x - cat.x) / cat.s * cat.face, y = (p.y - cat.y) / cat.s;
-    return (x > -72 && x < 46 && y > -66 && y < 5) || (x > -25 && x < 36 && y > -83 && y < -55);
+    if (!cat?.visible || cat.alpha < .6 || editor?.open || picker?.open) return false;
+    return cat.K.hit((p.x - cat.x) / cat.s * cat.face, (p.y - cat.y) / cat.s);
+  }
+  const float = 'position:absolute;z-index:7;transform:translate(-50%,-50%);width:42px;height:42px';
+  function pawPrint(g, x, y, r) {
+    g.fillStyle = INK;
+    g.beginPath(); g.ellipse(x, y + r * .3, r * .62, r * .5, 0, 0, TAU); g.fill();
+    for (const [dx, dy, k] of [[-.7, -.2, .24], [-.26, -.72, .27], [.26, -.72, .27], [.7, -.2, .24]]) {
+      g.beginPath(); g.ellipse(x + dx * r, y + dy * r, r * k, r * k * 1.2, dx * .5, 0, TAU); g.fill();
+    }
   }
   function pet() {
     if (!cat?.visible) return;
-    if (answer('pet')) Sound.sfx('squish', { gain: 0.5 });
+    if (answer('pet')) { Sound.pet(cat.kind, 'happy'); hearts(2); }
     cat.brush = true;
-    if (brush) return;
-    brush = iconBtn('brush', 'sm', cat.root, 'Paint kitten', openEditor);
-    brush.style.cssText = 'position:absolute;z-index:7;transform:translate(-50%,-50%);width:42px;height:42px';
-    brush.style.display = 'none';
+    if (!brush) {
+      brush = iconBtn('brush', 'sm', cat.root, 'Paint ' + cat.K.name.toLowerCase(), openEditor);
+      brush.style.cssText = float; brush.style.display = 'none';
+    }
+    brush.setAttribute('aria-label', 'Paint ' + cat.K.name.toLowerCase());
+    if (!swap && !preview && mine().length > 1) {
+      swap = iconBtn('', 'sm', cat.root, 'Her other pets', openPicker);
+      swap.style.cssText = float; swap.style.display = 'none';
+      pawPrint(miniCanvas(26, swap)[1], 13, 13, 10);
+    }
   }
 
   function dialog(parent, label, maxWidth) {
@@ -8294,117 +9169,208 @@ const Pet = (() => {
     el0.setAttribute('aria-label', label);
     return el0;
   }
+  // A pet alive on a small canvas inside a card: it blinks and breathes, hops when something about it changes,
+  // and gives its happy answer when told to. It stops by itself when its card closes.
+  function film(card, g, size, kind, at, colorsNow = () => colorsOf(kind)) {
+    const K = kinds[kind], f = { t0: performance.now(), r0: -1e9, b0: -1e9, react: null };
+    const frame = (now) => {
+      if (!card.isConnected || !card.open || !g.canvas.isConnected) return;
+      const el1 = (now - f.r0) / 1000, on = f.react && el1 < 2.1, u = on ? el1 / 2.1 : 0;
+      const r = K.act({ age: (now - f.t0) / 1000, u, a: on ? beat(u, .02, .89) : 0, reaction: on ? f.react : null, rise: 0, look: 0, gaze: 0, colors: colorsNow(), moving: true });
+      const bump = beat((now - f.b0) / 1000, 0, .28);
+      g.clearRect(0, 0, size, size);
+      g.save(); g.translate(at[0], at[1]); g.scale(1 + bump * .07, 1 - bump * .07); g.translate(-at[0], -at[1]);
+      K.paint(g, at[0], at[1], at[2], r.col, r.pose);
+      if (K.prop) K.prop(g, at[0], at[1], at[2], r.pose);
+      g.restore();
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+    return { react: (name) => { f.react = name; f.r0 = performance.now(); }, bump: () => { f.b0 = performance.now(); } };
+  }
 
-  // The meadow's reserved last slot. Buy and remember the ticket expense in one purse write.
+  // Each kind stands on the meadow's shelf. Buy and remember the ticket expense in one purse write.
   // This never puts a pet in a doodling's prizes or in a link.
-  const ticketCost = 8;
-  function shelfEntry(d) {
+  function shelfEntry(d, kind = 'kitten') {
+    const K = kinds[kind], name = K.name, cost = K.cost;
     const b = el('button', 'thumb prize');
-    b.type = 'button'; b.setAttribute('aria-label', 'Kitten');
+    b.type = 'button'; b.setAttribute('aria-label', name);
     const [, thumb] = miniCanvas(66, b);
     function render() {
       thumb.clearRect(0, 0, 66, 66);
-      const has = hasKitten();
-      paint(thumb, 36, has ? 56 : 46, .45, has ? colors : calico);
-      if (!has) {
+      const mineNow = has(kind);
+      K.paint(thumb, K.thumb[0], mineNow ? 56 : 46, K.thumb[1], mineNow ? colorsOf(kind) : K.defaults);
+      if (!mineNow) {
         drawTicket(thumb, 25, 56, 8);
         thumb.fillStyle = INK; thumb.font = `800 14px ${FONT}`;
-        thumb.textAlign = 'center'; thumb.textBaseline = 'middle'; thumb.fillText(String(ticketCost), 43, 57);
+        thumb.textAlign = 'center'; thumb.textBaseline = 'middle'; thumb.fillText(String(cost), 43, 57);
       }
-      b.classList.toggle('on', has);
+      b.classList.toggle('on', mineNow);
     }
     render();
     b.addEventListener('click', () => {
       if (d.guest || !b.isConnected) return;
       Sound.unlock(); Sound.sfx('page');
-      const card = dialog(App.ui, 'Kitten at the meadow shelf', 242);
+      const card = dialog(App.ui, name + ' at the meadow shelf', 242);
       const back = iconBtn('back', 'sm', card, 'Back to prizes', () => card.close());
       card.addEventListener('close', () => { card.remove(); Sound.sfx('page'); });
       const [cv, g] = miniCanvas(174, card);
       cv.style.cssText += ';display:block;margin:-12px auto 2px';
-      paint(g, 99, 138, 1.22, hasKitten() ? colors : calico);
-      if (!hasKitten()) {
-        const buy = iconBtn('', 'primary', card, 'Adopt kitten', () => {
-          if (hasKitten()) { card.close(); return; }
-          // paid through the purse's own door, as a prize is: only a write that was kept gives her the kitten
+      const show = film(card, g, 174, kind, K.card, () => (has(kind) ? colorsOf(kind) : K.defaults));
+      if (!has(kind)) {
+        const buy = iconBtn('', 'primary', card, 'Adopt ' + name.toLowerCase(), () => {
+          if (has(kind)) { card.close(); return; }
+          settle();
+          // paid through the purse's own door, as a prize is: only a write that was kept gives her the pet
           const result = App.changePurse((purse) => {
-            if (purse.own.includes('kitten')) return 'own';
-            if (purse.tickets < ticketCost) return 'short';
-            purse.tickets -= ticketCost;
-            purse.own.push('kitten');
+            if (purse.own.includes(kind)) return 'own';
+            if (purse.tickets < cost) return 'short';
+            purse.tickets -= cost;
+            purse.own.push(kind);
             return 'bought';
           });
           if (result !== 'bought' && result !== 'own') { wiggle(buy); GrowHud.shake(); Sound.sfx('error'); return; }
+          out = kind; save();                               // the one she has just chosen is the one that comes home with her
           render(); setIcon(buy, 'check');
           buy.classList.remove('glow');
-          buy.setAttribute('aria-label', 'Done adopting kitten');
+          buy.setAttribute('aria-label', 'Done adopting ' + name.toLowerCase());
+          show.react('pet');
           Sound.sfx('learn'); Sound.sfx('confetti');
         });
         buy.style.margin = '0 auto 10px';
-        buy.classList.toggle('dim', App.purse.tickets < ticketCost);
-        buy.classList.toggle('glow', App.purse.tickets >= ticketCost);
+        buy.classList.toggle('dim', App.purse.tickets < cost);
+        buy.classList.toggle('glow', App.purse.tickets >= cost);
         const [, ticket] = miniCanvas(50, buy);
         drawTicket(ticket, 17, 25, 11);
         ticket.fillStyle = INK; ticket.font = `800 20px ${FONT}`;
-        ticket.textAlign = 'center'; ticket.textBaseline = 'middle'; ticket.fillText(String(ticketCost), 37, 26);
+        ticket.textAlign = 'center'; ticket.textBaseline = 'middle'; ticket.fillText(String(cost), 37, 26);
       }
       card.showModal(); back.focus({ preventScroll: true });
     });
     return b;
   }
 
+  // Her basket: every pet she has, alive, in her colours. A tap calls that one out to be with her.
+  function openPicker() {
+    if (!cat?.visible || picker?.open || editor?.open) return;
+    const list = mine();
+    if (list.length < 2) return;
+    const across = Math.max(1, Math.min(list.length, Math.floor((innerWidth - 38) / 114)));
+    const cols = list.length === 4 && across === 3 ? 2 : across;
+    if (!picker) picker = dialog(cat.root, 'Her pets', 0);
+    picker.style.width = `min(${cols * 114 + 30}px,calc(100vw - 24px))`;
+    picker.replaceChildren();
+    picker.style.setProperty('--prize', '104px');
+    picker.onclose = () => { Sound.sfx('page'); };
+    iconBtn('back', 'sm', picker, 'Back from her pets', () => picker.close());
+    const row = el('div', '', picker);
+    row.style.cssText = `display:grid;grid-template-columns:repeat(${cols},104px);justify-content:center;gap:10px;margin:6px 0 8px`;
+    for (const k of list) {
+      const K = kinds[k];
+      const b = el('button', 'thumb prize', row);
+      b.type = 'button'; b.setAttribute('aria-label', K.name); b.setAttribute('aria-pressed', String(k === cat.kind));
+      b.classList.toggle('on', k === cat.kind);
+      const [, g] = miniCanvas(100, b);
+      const show = film(picker, g, 100, k, [K.view[0] - 3, K.view[1] - 3, K.view[2] * .92]);
+      b.addEventListener('click', () => {
+        Sound.unlock();
+        if (k === cat.kind) { show.react('pet'); Sound.pet(k, 'happy'); return; }
+        const root = cat.root, old = cat;
+        if (old.visible) App.fx?.burst('puff', old.x, old.y - old.K.box.neck * old.s, 8, { angle: -Math.PI / 2, spread: 3.1, speed: 140, size: 28 * old.s, life: .55, color: 'rgba(255,255,255,0.85)', drag: 2.4 });
+        out = k; save();
+        picker.close();
+        enter(root, 'called');
+        cat.side = old.side; cat.brush = false;
+      });
+    }
+    Sound.sfx('page');
+    hideButtons();
+    picker.showModal();
+  }
+
+  // a few colours of fur and feather beside the toy's own twelve, so a grey, a ginger and a snow-white one can be made, and made again
+  const FUR = ['#FFFDF5', '#F4CF9D', '#EA8B48', '#B9B4C0', '#857E90', '#584450'];
+  const PALE = '#F1E8DA';
+  // a close look at one part of a pet, for a button: the real drawing, moved and enlarged
+  function closeUp(icon, K, col, [cx, cy, zoom], k = 1) {
+    icon.save(); icon.translate(21, 21); icon.scale(.4 * zoom * k, .4 * zoom * k); icon.translate(-cx, -cy);
+    K.paint(icon, 0, 0, 1, col, {});
+    icon.restore();
+  }
   function openEditor() {
-    if (!cat?.visible || editor?.open) return;
-    if (!editor) editor = dialog(cat.root, 'Paint kitten', 520);
+    if (!cat?.visible || editor?.open || picker?.open) return;
+    const kind = cat.kind, K = cat.K, colors = colorsOf(kind), name = K.name.toLowerCase(), kitten = kind === 'kitten';
+    if (!editor) editor = dialog(cat.root, '', 520);
+    editor.setAttribute('aria-label', 'Paint ' + name);
     editor.replaceChildren();
     editor.onclose = () => { Sound.sfx('page'); };
     const header = el('div', '', editor);
     header.style.cssText = 'display:flex;gap:8px;align-items:flex-start;min-height:104px';
-    iconBtn('back', 'sm', header, 'Back from kitten colours', () => editor.close());
+    iconBtn('back', 'sm', header, 'Back from ' + name + ' colours', () => editor.close());
     const previewTile = el('div', '', header);
     previewTile.style.cssText = 'display:grid;place-items:center;flex:1;margin-right:42px';
     const [, g] = miniCanvas(106, previewTile);
+    const show = film(editor, g, 106, kind, K.view, () => colors);
     const row = (parent, css) => {
       const r = el('div', '', parent); r.style.cssText = 'display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:6px;' + css;
       return r;
     };
-    const regionRow = row(editor, 'margin-bottom:12px');
-    const swatchRow = row(editor, 'display:grid;grid-template-columns:repeat(6,auto);margin:4px auto 14px;gap:12px;padding:5px');
-    const patternRow = row(editor, '');
-    let selected = 'coat';
-    const regionButtons = [], swatches = [], patternButtons = [];
+    // seven parts in one row, on the narrowest phone too
+    const side = !kitten && innerWidth < 384 ? 37 : 42;
+    const regionRow = row(editor, kitten ? 'margin-bottom:12px' : `margin-bottom:12px;gap:${side < 42 ? 6 : 8}px`);
+    const wide = innerHeight < 480 || innerWidth >= 560;
+    const swatchRow = row(editor, `display:grid;grid-template-columns:repeat(${wide ? 9 : 6},auto);margin:4px auto 14px;gap:${wide ? 9 : 12}px;padding:5px`);
+    const patternRow = row(editor, kitten ? 'min-height:42px' : 'min-height:48px;gap:10px');
+    let selected = K.regions[0][0];
+    const regionButtons = [], swatches = [];
+    let patternButtons = [];
     const pic = (parent, label, tap) => {
       const b = iconBtn('', 'sm', parent, label, tap);
-      b.style.cssText = 'box-sizing:border-box;width:42px;height:42px;padding:0;overflow:hidden';
-      return [b, miniCanvas(32, b)[1]];
+      b.style.cssText = `box-sizing:border-box;width:${side}px;height:${side}px;padding:0;overflow:hidden`;
+      // the kitten's own small pictures sit inside the button; every other kind's close look fills it to the rim
+      const [cv, icon] = miniCanvas(kitten ? 32 : 42, b);
+      if (!kitten) cv.style.width = cv.style.height = side + 'px';
+      return [b, icon];
     };
-    for (const [k, label] of regions) {
+    const ring = (b, on) => { if (!kitten) { b.style.background = '#fff'; b.style.boxShadow = on ? '0 0 0 2px var(--card), 0 0 0 5px var(--ink)' : ''; } };
+    for (const [k, label, view] of K.regions) {
       const [b, icon] = pic(regionRow, label, () => {
-        selected = k; Sound.sfx('tap'); refresh();
+        selected = k; Sound.sfx('tap'); styleButtons(); refresh();
       });
-      regionButtons.push({ k, b, icon });
+      regionButtons.push({ k, b, icon, view });
     }
-    for (const [i, col] of PALETTE.entries()) {
+    for (const [i, col] of [...PALETTE, ...FUR].entries()) {
       const b = el('button', 'swatch', swatchRow);
       b.type = 'button'; b.style.setProperty('--c', col);
-      b.setAttribute('aria-label', 'Kitten colour ' + (i + 1));
-      b.addEventListener('click', () => { Sound.unlock(); colors[selected] = col; save(); Sound.sfx('tap', { pitch: i - 5 }); refresh(); });
+      b.setAttribute('aria-label', K.name + ' colour ' + (i + 1));
+      b.addEventListener('click', () => { Sound.unlock(); colors[selected] = col; save(); Sound.sfx('tap', { pitch: i - 5 }); show.bump(); refresh(); });
       swatches.push({ col, b });
     }
-    for (const k of patterns) {
-      const [b, icon] = pic(patternRow, k + ' kitten pattern', () => {
-        if (selected === 'coat') colors.pattern = k;
-        else colors.designs = { ...colors.designs, [selected]: k };
-        save(); Sound.sfx('tap'); refresh();
+    // what the chosen part can be: the kitten's four patterns, or the shapes and markings this kind has for it
+    const stylesOf = (k) => (kitten ? patterns : K.styles[k] || []);
+    const styleNow = (k) => (kitten ? (k === 'coat' ? colors.pattern : colors.designs?.[k] || 'plain')
+      : stylesOf(k).includes(colors.designs?.[k]) ? colors.designs[k] : stylesOf(k)[0]);
+    function styleButtons() {
+      patternRow.replaceChildren();
+      patternButtons = stylesOf(selected).map((k) => {
+        const [b, icon] = pic(patternRow, kitten ? k + ' kitten pattern' : `${k} ${name} ${selected}`, () => {
+          if (kitten && selected === 'coat') colors.pattern = k;
+          else colors.designs = { ...colors.designs, [selected]: k };
+          save(); Sound.sfx('tap'); show.bump(); refresh();
+        });
+        return { k, b, icon };
       });
-      patternButtons.push({ k, b, icon });
     }
+    styleButtons();
     function refresh() {
-      g.clearRect(0, 0, 106, 106);
-      paint(g, 60, 93, .86, colors);
-      for (const { k, b, icon } of regionButtons) {
-        b.setAttribute('aria-pressed', String(k === selected)); b.classList.toggle('on', k === selected);
-        icon.clearRect(0, 0, 32, 32);
+      for (const { k, b, icon, view } of regionButtons) {
+        b.setAttribute('aria-pressed', String(k === selected)); b.classList.toggle('on', kitten && k === selected); ring(b, k === selected);
+        icon.clearRect(0, 0, 42, 42);
+        if (!kitten) {
+          // the whole animal pale, and this part in its colour
+          closeUp(icon, K, { ...Object.fromEntries(K.regions.map(([r]) => [r, r === k ? colors[r] : PALE])), designs: colors.designs }, view);
+          continue;
+        }
         icon.save(); icon.translate(16, 16); icon.lineWidth = 2;
         const col = colors[k];
         if (k === 'coat') shape(icon, 'M-11 -2 Q-10 -11 0 -11 Q11 -10 11 1 Q10 10 0 10 Q-12 9 -11 -2Z', col);
@@ -8422,10 +9388,15 @@ const Pet = (() => {
       for (const { col, b } of swatches) {
         b.classList.toggle('on', col === colors[selected]); b.setAttribute('aria-pressed', String(col === colors[selected]));
       }
-      const currentPattern = selected === 'coat' ? colors.pattern : colors.designs?.[selected] || 'plain';
+      const currentPattern = styleNow(selected);
       for (const { k, b, icon } of patternButtons) {
-        b.classList.toggle('on', k === currentPattern); b.setAttribute('aria-pressed', String(k === currentPattern));
-        icon.clearRect(0, 0, 32, 32); icon.save(); icon.translate(17, 25); icon.scale(.34, .34); icon.lineWidth = 4;
+        b.classList.toggle('on', kitten && k === currentPattern); b.setAttribute('aria-pressed', String(k === currentPattern)); ring(b, k === currentPattern);
+        icon.clearRect(0, 0, 42, 42);
+        if (!kitten) {
+          closeUp(icon, K, { ...colors, designs: { ...colors.designs, [selected]: k } }, K.regions.find(([r]) => r === selected)[2], .88);
+          continue;
+        }
+        icon.save(); icon.translate(17, 25); icon.scale(.34, .34); icon.lineWidth = 4;
         const swatch = { ...colors, pattern: k,
           patchA: colors.patchA === colors.coat ? shade(colors.coat, .33) : colors.patchA,
           patchB: colors.patchB === colors.coat ? shade(colors.coat, -.43) : colors.patchB };
@@ -8441,16 +9412,19 @@ const Pet = (() => {
     }
     refresh();
     Sound.sfx('page');
-    brush.style.display = 'none';
+    hideButtons();
     editor.showModal();
   }
 
-  const state = () => ({ owned: hasKitten(), preview, colors: { ...colors, designs: { ...colors.designs } }, editor: !!editor?.open, visible: !!cat?.visible, reaction: cat?.reaction || null, elapsed: cat?.elapsed || 0,
-    ...(cat?.visible ? { x: cat.x, y: cat.y, s: cat.s, b: { ...cat.bounds }, zones: cat.zones.map(b => ({ ...b })), alpha: cat.alpha, gap: cat.gap,
+  const state = () => ({ owned: hasKitten(), preview, kind: cat?.kind || current(), mine: mine(), out, met: [...met],
+    colors: { ...colorsOf('kitten'), designs: { ...colorsOf('kitten').designs } }, pets: JSON.parse(JSON.stringify(kept)),
+    editor: !!editor?.open, picker: !!picker?.open, visible: !!cat?.visible, reaction: cat?.reaction || null, elapsed: cat?.elapsed || 0, sleep: cat?.sleep || 0,
+    ...(cat?.visible ? { x: cat.x, y: cat.y, s: cat.s, face: cat.face, b: { ...cat.bounds }, zones: cat.zones.map(b => ({ ...b })), alpha: cat.alpha, gap: cat.gap,
       pose: { ...cat.pose }, coat: cat.col, pouncing: !!cat.pounce, obstacles: cat.clearance } : {}) });
   // The look tool can compare the real silhouettes when their guide boxes touch.
   const paintCompany = g => { for (const k of cat?.company || []) k.draw(g); };
-  return { paint, paintCompany, calico, adopt, owned: hasKitten, shelfEntry, available, enter, leave, answer, expectMushroom, step, draw, hit, pet, state };
+  return { reload: load, paint: paintKitten, paintCompany, calico, kinds: ORDER, art: kinds, adopt, owned: hasKitten, has, mine, shelfEntry, available, enter, leave, answer, expectMushroom, beat: beatNow, step, draw, hit, pet, state,
+    choose: (k) => { if (!has(k)) return false; out = k; save(); if (cat) enter(cat.root, 'called'); return true; } };
 })();
 
 // ===== world.js =====
@@ -8533,14 +9507,14 @@ const World = (() => {
   let phase = 'play', theme = null, backdrop = null, bare = null, marks = [], homeS = 100, baseS = 100;   // bare: the snow place without its painted snowman, while the toy box's is out
   let items = [], timers = [], ptr = null, held = null;
   let arrival = null, rideFrame = null;
-  const wake = { charge: 0, holding: false, beat: 0, idle: 0 };
+  const wake = { charge: 0, holding: false, beat: 0, idle: 0, key: false, byKey: false };
   const ai = { t: 2, busy: null, boops: 0, boopT: 0, idle: 0, hopCd: 0, snore: 0, cracks: 0, spin: 0, dir: 1, landT: 0, fireT: 3 };
   const teach = { armed: false, rec: null, perf: null, trail: [], hint: 0 };
   const show = { on: false, amt: 0, pulse: 0, next: 0, note: 0, hue: 0 };
   const fire = { t: 0, a: 0 };
   let rocket = null, night = 0, dark = 0, shake = 0, flash = 0, time = 0, voiceSize = -1, clouds = [];
   let place = 'meadow', amb = null, wipe = null, toy = null, pals = [], placePanel, palPanel, tunePanel, placeBtn, palBtn, goal = 0;
-  let nameTag, fairBtn, snackG = [], snackEls = [], goalAt = -99;
+  let nameTag, fairBtn, wakePad, snackG = [], snackEls = [], goalAt = -99;
   let host = null, hostFrom = null;   // going round: the friend (one of this device's own doodlings) whose home she is in, and the place she came from
   let arrDone, lastTag = 140, nameSpot = null;   // arranging the room on a screen of its own: its tick; where the name tag last sat, and where it is placed
   let thingPanel, colPanel, armBtn, roomG = null, grow = null, doorBtn, doorKey = '';   // doorBtn (armBtn too): her room's painting, a button in the dock     // the room: its tray, the armchair, where things go on this screen, and a size change in progress
@@ -8571,6 +9545,12 @@ const World = (() => {
     iconBtn('pencil', 'ghost', top, 'Change it', () => { Sound.sfx('page'); leaveModes(); App.go('studio', { critter: c }); });
     iconBtn('camera', 'ghost', top, 'Keepsake card', () => { Sound.sfx('camera'); leaveModes(); Card.open(c, pals.map((p) => p.c.d)); });
     // its name, on a tag under the buttons: tap to write it or change it
+    // while she sleeps she is the one thing a key can reach: holding Space or Enter on her is the same hold as a finger (Brad, 2026-11-18, Experience W155: "Same hold by key")
+    wakePad = el('button', 'wakepad', root); wakePad.type = 'button'; wakePad.setAttribute('aria-label', 'Wake up'); wakePad.hidden = true;
+    const wakeKey = (e) => e.key === ' ' || e.key === 'Enter';
+    wakePad.addEventListener('keydown', (e) => { if (!wakeKey(e)) return; e.preventDefault(); if (!e.repeat && phase === 'wake') { wake.holding = wake.key = wake.byKey = true; wake.idle = 0; } });
+    wakePad.addEventListener('keyup', (e) => { if (!wakeKey(e)) return; e.preventDefault(); if (wake.key) wake.holding = wake.key = false; handOff(); });
+    wakePad.addEventListener('blur', () => { if (wake.key) wake.holding = wake.key = false; });   // (a finger on her takes the focus away: that hold is the finger's, and goes on)
     nameTag = el('input', 'tag', root);
     nameTag.type = 'text'; nameTag.maxLength = 14; nameTag.placeholder = '✎'; nameTag.setAttribute('aria-label', 'Name');
     nameTag.autocomplete = 'off'; nameTag.spellcheck = false; nameTag.enterKeyHint = 'done';
@@ -9073,9 +10053,9 @@ const World = (() => {
     drawSlots();
     voiceSize = -1; syncVoice();
     if (!d.awake) {
-      phase = 'wake'; c.asleep = true; dark = 0; wake.charge = 0; wake.holding = false; wake.idle = 0;
-      root.classList.add('waking');
-    } else { phase = 'play'; c.asleep = false; dark = 0; root.classList.remove('waking'); }
+      phase = 'wake'; c.asleep = true; dark = 0; wake.charge = 0; wake.holding = wake.key = false; wake.idle = 0;
+      setWaking(true); placeWakePad(); wakePad.focus({ preventScroll: true });
+    } else { phase = 'play'; c.asleep = false; dark = 0; wake.key = false; setWaking(false); }
     if (d.awake && args.ride) beginArrival(args.ride);
   }
 
@@ -9556,6 +10536,7 @@ const World = (() => {
   function onBeat(beat, bar) {
     if (!show.on || App.screen !== World) return;
     show.pulse = 1; show.hue = (show.hue + 0.13) % 1;
+    Pet.beat?.();
     pals.forEach((p, i) => { const k = p.c; if (k.grab || p.perf || !k.standing) return; if ((beat + i) % 2) k.hop((i % 2 ? 1 : -1) * (beat > 1 ? 1 : -1) * k.S * 0.9, 0.32); else k.qv -= 3; });
     if (busy() || c.grab) return;
     if (beat === 0 && bar > 0 && bar % 2 === 0) {
@@ -9574,6 +10555,20 @@ const World = (() => {
   }
 
   // ----- waking up -----
+  // the play buttons slide away while she sleeps; they leave the reach of Tab too, and the pad over her is all a key can find
+  function setWaking(on) {
+    root.classList.toggle('waking', on);
+    root.querySelectorAll('.dock, .drawer, .topbar, input.tag').forEach((e) => { e.inert = on; });
+    if (on) { wakePad.hidden = false; wake.byKey = false; } else handOff();
+  }
+  // awake: the pad goes once the key is let go (a held key repeats, and must not press the button the focus moves to); a key user's focus goes on to the snacks
+  function handOff() {
+    if (wakePad.hidden || wake.key || root.classList.contains('waking')) return;
+    const had = document.activeElement === wakePad;
+    wakePad.hidden = true;
+    if (had && wake.byKey) snackBtn.focus({ preventScroll: true });
+  }
+  function placeWakePad() { const r = c.S * 2.2; Object.assign(wakePad.style, { left: (c.x - r) + 'px', top: (c.y - r) + 'px', width: 2 * r + 'px', height: 2 * r + 'px' }); }
   function wakeNow() {
     phase = 'play';
     d.awake = true; c.alive = true; c.asleep = false;
@@ -9585,7 +10580,7 @@ const World = (() => {
     for (let i = 0; i < 3; i++) fxp.emit('ring', c.x, c.y, { size: S * (2.5 + i * 1.6), life: 0.6 + i * 0.2, color: '#fff' });
     c.airT = 0; c.hopT = 0; c.hop(0, 1.5); c.setMood('wide', 0.7);
     after(0.55, () => { Sound.voice('hello'); c.say(0.75); c.setMood('happy', 1.6); });
-    after(0.3, () => { root.classList.remove('waking'); });
+    after(0.3, () => setWaking(false));
     ai.t = 3; ai.idle = 0;
     App.keep(c);
     if (!d.name) after(2.6, () => { if (!d.name) { nameTag.classList.add('pulse'); popIn(nameTag); } });
@@ -9644,13 +10639,13 @@ const World = (() => {
       if (teach.rec) { finishRec(); return; }
       if (t.squeezed) { squeezeRelease(); return; }
       if (t.moved < 14 && dt < 0.4) { boop(p || t); return; }
-      if (place === 'room' && Room.dropped(c)) { ai.snore = 0.8; ai.idle = 0; Sound.voice('yawn'); c.say(0.3); c.lookAt = null; return; }   // let go over the bed: tucked in
+      if (place === 'room' && Room.dropped(c, p || t)) { ai.snore = 0.8; ai.idle = 0; Sound.voice('yawn'); c.say(0.3); c.lookAt = null; return; }   // let go over the bed: tucked in
       const sp = hypot(c.vx, c.vy);
       if (sp > c.S * 9 && !c.fx.ice) { Sound.voice('whee'); c.say(0.35); c.setMood('happy', 0.9); Sound.sfx('whoosh', { gain: 0.5 }); }
       if (ai.spin > 16 && !c.fx.ice) after(0.5, () => { c.setMood('dizzy', 2.2); Sound.voice('dizzy'); });
     } else if (t.pal) {
       const k = t.pal.c; k.grab = null;
-      if (t.moved >= 14 && place === 'room' && Room.dropped(k)) { palVoice(k, 'yawn'); k.say(0.3); return; }
+      if (t.moved >= 14 && place === 'room' && Room.dropped(k, p || t)) { palVoice(k, 'yawn'); k.say(0.3); return; }
       if (t.moved < 14 && dt < 0.4) { fxp.emit('ring', t.x, t.y, { size: 46, life: 0.35, color: 'rgba(255,255,255,0.9)' }); k.poke(t.x, t.y); palVoice(k, 'boop', { pitch: rand(-2, 4) }); k.say(0.14); k.setMood('wide', 0.3); t.pal.tagT = 3; }
       else if (hypot(k.vx, k.vy) > k.S * 9) { palVoice(k, 'whee'); k.say(0.35); k.setMood('happy', 0.9); }
     } else if (t.toy) {
@@ -9722,7 +10717,7 @@ const World = (() => {
 
     // waking: press and hold
     if (phase === 'wake') {
-      dark = damp(dark, 0.78, 4, dt);
+      dark = damp(dark, 0.78, 4, dt); placeWakePad();
       wake.idle += dt;
       if (wake.holding) {
         wake.charge += dt / 1.7;
@@ -12212,6 +13207,8 @@ const DayOut = (() => {
   }
   const saveMeadow = () => { try { localStorage.setItem(MEADOW, JSON.stringify(meadow)); } catch (e) { /* no storage: it still plays, it just forgets */ } };
   loadMeadow();
+  // a family brought back, or a day won in another tab: a day won on either side stays won; the star stretch is as the save says (Brad, 2026-11-18, Build W45)
+  function reloadMeadow() { const had = meadow; loadMeadow(); meadow.won = meadow.won.map((v, i) => v || !!had.won[i]); meadow.star = meadow.star.map((v, i) => v || !!had.star[i]); }
   // the meadow's friends: one waits at each day's flag, and joins her friends drawer the first time that day is won
   const friends = [];
   function friendOf(i) {
@@ -15214,10 +16211,23 @@ const DayOut = (() => {
     });
     rideFrame = { bus: Bus.bounds(bus), riders: riders.map((k) => ({ ...k.rideBounds })), t: ride.t, wheelY: bus.y, ticketCount: ride.tickets.length };
   }
+  // after the fifth day there is no next stop: home is where to go. As the bus parks, the home picture pops once, then pulses as the next
+  // stop does on the other days (Brad, 2026-11-19, Experience W156: "something that finishes the loop of going out and returning"; a candidate)
+  function drawHomeCall(g) {
+    const { x, y, r } = map.home, u = Math.max(0, mapT - 0.35);
+    if (!u) return;
+    const s = 1 + 0.24 * Math.abs(Math.sin(u * 8)) * Math.exp(-u * 3.2) + 0.05 * Math.max(0, Math.sin(time * 5)) * Math.min(1, u);
+    g.strokeStyle = `rgba(255,201,40,${(0.5 + 0.4 * Math.sin(time * 5)) * Math.min(1, u * 3)})`; g.lineWidth = r * 0.16;
+    g.beginPath(); g.arc(x, y, r * 1.2 * s, 0, TAU); g.stroke();
+    if (s <= 1.001) return;
+    g.save(); g.translate(x, y); g.scale(s, s); g.translate(-x, -y);
+    g.beginPath(); g.arc(x, y, r * 1.06, 0, TAU); g.clip(); g.drawImage(map.homeLayer, 0, 0, W, H); g.restore();
+  }
   function drawMap(g) {
     const R = map.R, nx = nextDay();
     g.drawImage(map.bg, 0, 0, W, H);
     g.drawImage(map.homeLayer, 0, 0, W, H);
+    if (ride && !ride.action && meadow.won.every(Boolean)) drawHomeCall(g);
     map.nodes.forEach((nd, i) => {
       const won = meadow.won[i], open = won || i === nx, isNext = i === nx && !won, r = R * (isNext ? 1 + 0.05 * Math.sin(time * 5) : 1);
       g.save(); g.translate(nd.x, nd.y);
@@ -15337,6 +16347,8 @@ const DayOut = (() => {
     map: () => openMap(-1),
     arrive: (i) => openMap(i),
     idle: (t) => { idle = t; },
+    winOne: (i) => { meadow.won[i] = true; saveMeadow(); },   // (a day won, written as a win writes it)
+    meadow: () => JSON.parse(JSON.stringify(meadow)),
     win: (list) => { meadow.won = DAYS.map((_, i) => !!(list && list[i])); saveMeadow(); },
     put: (x) => { c.x = x + cam; c.vx = 0; },
     statue: (v) => { statueWant = v; },
@@ -15349,7 +16361,7 @@ const DayOut = (() => {
     touching: () => touching(),
     peek: () => ({ drawOn: DRAWING, phase, day, star, cur, sel, drawing, cam, S, F, W, H, L, kinds: course.map((o) => o.k + (o.layer ? '@' + o.layer : '')), done: course.map((o) => o.done), plates: course.map((o) => o.plate.k), plates2: course.map((o) => (o.plate2 ? o.plate2.k : null)), plateAt: course.map((o) => platesOf(o).map((p) => ({ x: p.x - cam, y: F - S * 0.12, r: p.r || S * 0.5, k: p.k, want: p.want || null, drop: p.drop === undefined ? 1 : p.drop, hop: p.hop || 0, next: o.plate2 ? p === nextPlate(o) : !p.k }))), lit: course.map((o) => o.lit), things: things.map((t) => ({ x: t.x - cam, y: t.y, S: t.S, at: t.at, power: powerOf(t), job: t.job || null, b: { minX: t.bounds.minX - cam, maxX: t.bounds.maxX - cam, minY: t.bounds.minY, maxY: t.bounds.maxY } })), c: { x: c.x - cam, y: c.y, S: c.S, sc: c.sc, qv: c.qv, fx: Object.keys(c.fx), b: { minX: c.bounds.minX - cam, maxX: c.bounds.maxX - cam, minY: c.bounds.minY, maxY: c.bounds.maxY }, rest: !!c.standing && Math.abs(c.vx) < 5 && Math.abs(c.vy) < 5 }, plateX: course.map((o) => o.plate.x - cam), waitX: course.map((o) => o.wait - cam), troubles: course.map((o) => ({ a: o.a - cam, b: o.b - cam, la: o.la - cam, lb: o.lb - cam, top: o.top })), saved: d && d.dayout && Array.isArray(d.dayout.days) && d.dayout.days[day] ? d.dayout.days[day].length : 0, finds: Object.fromEntries(Object.keys(NEEDS).map((n) => [n, Finds.of(n).map((f) => f.w + (f.pic ? '+pic' : ''))])), ways: Object.fromEntries(Object.keys(NEEDS).map((n) => [n, NEEDS[n].length])), book: !!book, badges: snackEls.filter((b) => b._shown).map((b) => b._k), fresh: !!fresh, won: meadow.won.slice(), resting: Object.keys(resting), bubble: course[cur] ? Finds.recent(needsOf(course[cur]), 3).map((m) => m.need + '/' + m.w + (m.none ? ' (nothing)' : m.ok ? ' (star)' : ' (squiggle)')) : null, moments: moments.map((m) => (m.end ? ['end', +m.t.toFixed(2)] : [m.labels, +m.t.toFixed(2)])), floor: floorAt(c.x), wx: c.x, ta: course.map((o) => [o.a, o.b, o.k]), bitsNow: bits.map((b) => [b.k, +(b.t / b.dur).toFixed(2)]), starWon: meadow.star.slice(), met: met().map((x) => x.id), look: look ? look.step : null, ribbon: ribbon.key ? { x: ribbon.x, y: ribbon.y, w: ribbon.w, h: ribbon.h, inline: ribbon.inline, pathY: ribbon.pathY, slots: ribbon.slots.map((q) => ({ i: q.i, x: q.x, y: q.y, w: q.w, h: q.h })), flag: ribbon.flag, me: ribbonX(c.x) } : null, top: topRoom() }),
   };
-  return { enter, exit, step, draw, down, move, up, resize, met, friend: (i) => friendOf(i).d };
+  return { enter, exit, step, draw, down, move, up, resize, met, friend: (i) => friendOf(i).d, reload: reloadMeadow };
 })();
 
 // what she drew in each day out is kept with her doodling: tidy what came from outside (creature.js, cleanCreature)
@@ -15703,6 +16715,8 @@ const Quest = (() => {
   const doneAll = [[], []];                                // the snack trail, the number pond
   try { const s = JSON.parse(localStorage.getItem('doodlings.trail.v1') || 'null'); if (s && Array.isArray(s.done)) doneAll[0] = s.done.map(Boolean); if (s && Array.isArray(s.pond)) doneAll[1] = s.pond.map(Boolean); } catch (e) { /* no storage: the trail still works, it just forgets */ }
   let done = doneAll[0];
+  // a family brought back on the grown-ups' page, or a win in another tab: every level done on either side stays done, in place, so `done` still points at the right list (Brad, 2026-11-18, Build W45: "Keep my place")
+  function reload() { try { const s = JSON.parse(localStorage.getItem('doodlings.trail.v1') || 'null'), or = (a, b) => { if (Array.isArray(b)) b.forEach((v, i) => { a[i] = !!(a[i] || v); }); }; or(doneAll[0], s && s.done); or(doneAll[1], s && s.pond); } catch (e) { /* what she has here stays */ } }
   const saveDone = () => { try { localStorage.setItem('doodlings.trail.v1', JSON.stringify({ done: doneAll[0], pond: doneAll[1] })); } catch (e) { /* ignore */ } };
   const LV = () => WORLDS[world];
 
@@ -16625,6 +17639,9 @@ const Quest = (() => {
   }
   document.addEventListener('visibilitychange', () => { if (document.hidden && App.screen === Quest && (mode === 'run' || mode === 'win')) { Sound.music.stop(); if (mode === 'run') { resetRun(); } } });
 
+  // for the tests: a level won, written exactly as a win writes it (test/keep-place.mjs)
+  window.__questWin = (w, i) => { doneAll[w][i] = true; saveDone(); };
+  window.__questDone = () => doneAll.map((a) => a.slice());
   // read-only peek for the automated play-through and the guide recorder
   window.__quest = () => ({
     mode, lv, world, cam, S, F, L, active, done: done.slice(), hop: hopL && { to: hopL.to, end: hopL.end, jellies: hopL.jellies, pos: hopL.pos, fails: hopL.fails, lit: hopL.lit, hintN: hopL.hintN, x: hopL.sx(hopL.to) - cam }, running: !!script, won, oops, hint: !!hint,
@@ -16634,7 +17651,7 @@ const Quest = (() => {
     nodes: map.nodes.map((n) => ({ x: n.x, y: n.y })), R: map.R, pal: pal ? { x: pal.x - cam, y: pal.y } : null,
   });
 
-  return { enter, exit, step, draw, down, move, up, resize, met };
+  return { enter, exit, step, draw, down, move, up, resize, met, reload };
 })();
 
 // ===== shoot.js =====
@@ -17882,9 +18899,9 @@ function friendChoices(d) {
 
 const Fair = (() => {
   let root, panel, prizeEls = {}, tryRow, buyBtn, offBtn, trying = null;   // trying: the prize it has on to see, not bought yet
-  let shelfTabs, shelfButtons, shelfRow, prevPage, nextPage, petSlot, shelf = 'fair', shelfPage = 0;
+  let shelfTabs, shelfButtons, shelfRow, prevPage, nextPage, shelf = 'fair', shelfPage = 0;
   let tryParts = null;
-  let meadowPet = null;
+  let meadowPet = null, petKinds = [];
   const shelfSize = 3;
   let dress = { sel: -1, drag: null }, flagFly = null;   // flagFly: bought flags going from over her head to the awning   // the dressing room: which of the tried prize's parts wears the ring, and a move or a turn in progress
   let c = null, d = null, fxp = null, mode = 'hub', time = 0, bg = null, bgW = 0, bgH = 0, crowd = [], pals = [], going = null, ptr = null, idle = 0;
@@ -17907,8 +18924,7 @@ const Fair = (() => {
     prevPage = iconBtn('back', 'shelf-arrow', row, 'Previous prizes', () => turnShelf(-1));
     shelfRow = el('div', 'shelf-slots', row);
     nextPage = iconBtn('next', 'shelf-arrow', row, 'More prizes', () => turnShelf(1));
-    // The last meadow spot is reserved. A pet can supply its own button, with its own preview and adoption.
-    petSlot = el('div', 'shelf-slot', shelfRow);
+    // The last meadow spots are the pets'. Each supplies its own button, with its own preview and adoption.
     for (const p of PRIZES) {
       const b = el('button', 'thumb prize', shelfRow); b.type = 'button'; b.setAttribute('aria-label', 'Prize ' + p.k);
       b.addEventListener('click', () => { Sound.unlock(); tapPrize(p.k); });
@@ -18067,13 +19083,13 @@ const Fair = (() => {
   }
 
   // ----- the prize counter -----
-  function setMeadowPet(makeEntry) {
-    meadowPet = makeEntry;
+  function setMeadowPet(makeEntry, kinds = ['kitten']) {
+    meadowPet = makeEntry; petKinds = kinds;
     if (mode === 'counter') drawShelf();
   }
   const shelfEntries = () => {
     const entries = PRIZES.filter((p) => (p.shelf || 'fair') === shelf);
-    return shelf === 'meadow' ? [...entries, null] : entries;
+    return shelf === 'meadow' ? [...entries, ...(meadowPet ? petKinds : [null]).map((k) => ({ pet: k }))] : entries;
   };
   function selectShelf(k) {
     if (mode !== 'counter' || k === shelf || (k === 'meadow' && !App.purse.meadow)) return;
@@ -18097,11 +19113,10 @@ const Fair = (() => {
     nextPage.disabled = start + shelfSize >= entries.length;
     shelfRow.replaceChildren();
     for (const p of entries.slice(start, start + shelfSize)) {
-      if (p) { shelfRow.append(prizeEls[p.k]); drawPrizeThumb(p); }
+      if (!('pet' in p)) { shelfRow.append(prizeEls[p.k]); drawPrizeThumb(p); }
       else {
-        petSlot.replaceChildren();
-        if (meadowPet) petSlot.append(meadowPet(d));
-        shelfRow.append(petSlot);
+        const slot = el('div', 'shelf-slot', shelfRow);
+        if (meadowPet) slot.append(meadowPet(d, p.pet));
       }
     }
   }
@@ -18819,9 +19834,18 @@ const App = {
   bringBackFamily() {
     try {
       const s = JSON.parse(localStorage.getItem('doodlings.v1') || 'null');
-      if (!s || !Array.isArray(s.list)) return;
       const have = new Set(this.list.map((d) => d.id));
-      this.list.push(...s.list.filter((d) => d && !have.has(d.id)).map(cleanCreature).filter(Boolean));
+      if (s && Array.isArray(s.list)) this.list.push(...s.list.filter((d) => d && !have.has(d.id)).map(cleanCreature).filter(Boolean));
+    } catch (e) { /* the current shelf is still here */ }
+    // everything else the restore can bring back is read again too, so the next save keeps it and play goes on where it was (Brad, 2026-11-18, Build W45: "Keep my place")
+    try {
+      const v = JSON.parse(localStorage.getItem('doodlings.guests.v1') || 'null'), ids = new Set(this.guests.map((x) => x.id));
+      const more = Array.isArray(v) ? v.map(cleanCreature).filter((x) => x && x.outline && !ids.has(x.id)) : [];
+      more.forEach((x) => { x.guest = true; x.awake = true; });
+      if (more.length) this.guests = [...this.guests, ...more].slice(0, 12);
+    } catch (e) { /* the visitors here stay */ }
+    for (const m of [Quest, DayOut, Finds, Pet]) try { m.reload(); } catch (e) { /* that part stays as it was */ }
+    try {
       this.refreshPurse();
       if (this.screen === Home) Home.resize();
     } catch (e) { /* the current shelf is still here */ }
@@ -18968,7 +19992,8 @@ const App = {
     window.addEventListener('storage', (e) => {
       if (e.storageArea !== localStorage) return;
       if (e.key === Purse.key || e.key === null) this.refreshPurse();
-      if (e.key === 'doodlings.v1') this.bringBackFamily();   // (the page for grown-ups in its own tab, or the toy open twice)
+      // the page for grown-ups in its own tab, or the toy open twice: a restore writes several stores, so read them all again once it settles
+      if (e.key === null || /^doodlings\./.test(e.key)) { clearTimeout(this.againT); this.againT = setTimeout(() => this.bringBackFamily(), 60); }
     });
     Sound.setMuted(this.muted);
     this.resize();
@@ -19079,7 +20104,7 @@ App.init();
 
 // ===== hooks.js =====
 // Register with the meadow shelf when the shelf is in this build.
-Fair.setMeadowPet?.(Pet.shelfEntry);
+Fair.setMeadowPet?.(Pet.shelfEntry, Pet.kinds);
 
 // ---------- hooks for the automated tests and the picture-guide recorder (never used during play) ----------
 // step time by hand, so every recorded frame is exactly one tick
@@ -19138,7 +20163,7 @@ window.__doodArt = {
 // the drawing internals, for contact sheets (tools/look.mjs)
 window.__doodReaderSource = () => makeReader.toString();   // for the lab's timing of one look
 window.__doodKit = { Pet, Sound, DayOut, Drawn, DRAWING, applySnack, NEEDS, Needs, KINDS, DAYS, friendChoices, Scan, QR, App, Places, Room, ROOM_THINGS, ROOM_PAINT, PARTS, PART_TRAYS, PLACE_LIST, QUESTS, PONDS, VOICE_LIST, TUNE_LIST, drawPartThumb, makeDemo, Critter, worldTheme, PALETTE,
-  Shape, Snacks, newCreatureData, partTint, shade, inkOf, Grow, GrowHud, Codec, Cup, Shoot, Fair, LOOKS, PRIZES, CUPS, QUALS, SHOOT, ShootRules };
+  Finds, Shape, Snacks, newCreatureData, partTint, shade, inkOf, Grow, GrowHud, Codec, Cup, Shoot, Fair, LOOKS, PRIZES, CUPS, QUALS, SHOOT, ShootRules };
 
 })();
 </script>

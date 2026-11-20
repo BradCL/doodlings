@@ -183,6 +183,24 @@ const Purse = (() => {
       const fMeadow = parse('doodlings.meadow.v1'), meadow = read('doodlings.meadow.v1');
       if (fMeadow && typeof fMeadow === 'object') writes.set('doodlings.meadow.v1', JSON.stringify({ won: or(meadow && meadow.won, fMeadow.won), star: or(meadow && meadow.star, fMeadow.star), harder: !!(meadow ? meadow.harder : fMeadow.harder) }));
       for (const k of ['doodlings.room.v1', 'doodlings.roomtray.v1', 'doodlings.fair.v1', 'doodlings.kitten.v1']) if (st[k] && ls.getItem(k) === null) writes.set(k, st[k]);
+      // Her pets are all kept under the kitten's name. One she has here stays as she painted it here; one that came only with the family comes in its colours.
+      const fPets = parse('doodlings.kitten.v1'), pets = read('doodlings.kitten.v1');
+      if (fPets && typeof fPets === 'object' && pets && typeof pets === 'object') {
+        const hereOwn = Purse.read(ls).own, inPurse = Array.isArray(hereOwn) ? hereOwn : [];
+        const each = (o) => ({ ...(o.pets && typeof o.pets === 'object' ? o.pets : {}), kitten: o });
+        const mine = each(pets), theirs = each(fPets), has = (k) => !!mine[k] && typeof mine[k] === 'object' && (mine[k].owned === true || inPurse.includes(k));
+        const both = { ...pets, pets: { ...(pets.pets && typeof pets.pets === 'object' ? pets.pets : {}) } };
+        for (const [k, from] of Object.entries(theirs)) {
+          if (!from || typeof from !== 'object' || has(k)) continue;
+          if (k === 'kitten') { both.owned = pets.owned === true || from.owned === true; if (from.colors && typeof from.colors === 'object') both.colors = from.colors; }
+          else both.pets[k] = { owned: from.owned === true, colors: from.colors };
+        }
+        // who has already come home, on either side; a save from before that was written down counts everyone it has
+        const home = (o, all, own) => (Array.isArray(o.met) ? o.met : Object.keys(all).filter(own)).filter((k) => typeof k === 'string');
+        both.met = [...new Set([...home(pets, mine, has), ...home(fPets, theirs, (k) => !!theirs[k] && theirs[k].owned === true)])];
+        if (typeof both.out !== 'string' && typeof fPets.out === 'string') both.out = fPets.out;
+        writes.set('doodlings.kitten.v1', JSON.stringify(both));
+      }
       // Commit the purse last, so a failed family restore never exposes a new balance.
       const purse = Purse.merge(Purse.read(ls), fShelf, fPurse);
       purse.meadow ||= !!(fMeadow || meadow);
